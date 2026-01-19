@@ -7,7 +7,9 @@ import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import coil.load
 import ru.kolxz2.chertholder.databinding.ItemCardBinding
 
@@ -80,13 +82,13 @@ class CardStackLayout @JvmOverloads constructor(
      * - urls[1] -> middle card (index 1)
      * - urls[2] -> back card (index 0)
      */
-    fun setImageUrls(urls: List<String>) {
+    fun setImageUrls(urls: List<String>, animateLayout: Boolean = true) {
         val limited = urls.take(3)
 
         // Keep at least 1 card visible (even with 0 URLs) to preserve the layout,
         // but hide the image when there's nothing to show.
         val visible = limited.size.coerceIn(1, 3)
-        setCardCount(visible)
+        setCardCount(visible, animateLayout = animateLayout)
 
         // Clear/hide all images first (important for reuse and partial updates).
         for (binding in bindings) {
@@ -112,7 +114,7 @@ class CardStackLayout @JvmOverloads constructor(
      * 2 -> middle + front
      * 3 -> back + middle + front
      */
-    fun setCardCount(count: Int) {
+    fun setCardCount(count: Int, animateLayout: Boolean = true) {
         val clamped = count.coerceIn(1, 3)
         visibleCardCount = clamped
 
@@ -126,12 +128,94 @@ class CardStackLayout @JvmOverloads constructor(
         bindings.getOrNull(2)?.root?.visibility = if (showFront) View.VISIBLE else View.GONE
 
         // Animate next layout pass when stack composition changes.
-        animateNextLayout = true
+        animateNextLayout = animateLayout
         requestLayout()
         invalidate()
     }
 
     fun getCardCount(): Int = visibleCardCount
+
+    /**
+     * Animation #1: drop the whole stack down, replace cards, then rise back.
+     *
+     * Contract:
+     * - The stack moves down out of view.
+     * - Data is replaced while it's down (so the user doesn't see a hard swap).
+     * - Then the stack returns to its original Y position.
+     */
+    fun startAnimation1(newUrls: List<String>) {
+        if (!isLaidOut) {
+            post { startAnimation1(newUrls) }
+            return
+        }
+
+        // Cancel any per-card animations that might be running.
+        for (i in 0 until childCount) {
+            getChildAt(i)?.animate()?.cancel()
+        }
+
+        val baseY = translationY
+        val extraDrop = dpToPxF(24f)
+        val dropTo = baseY + height.toFloat() + extraDrop
+
+        animate().cancel()
+        animate()
+            .translationY(dropTo)
+            .setDuration(220L)
+            .setInterpolator(AccelerateDecelerateInterpolator())
+            .withEndAction {
+                // Replace while we're down.
+                setImageUrls(newUrls, animateLayout = false)
+
+                // Let layout/image work enqueue before we rise back up.
+                post {
+                    animate().cancel()
+                    animate()
+                        .translationY(baseY)
+                        .setDuration(280L)
+                        .setInterpolator(OvershootInterpolator(0.9f))
+                        .start()
+                }
+            }
+            .start()
+    }
+
+    /**
+     * Temporary animation #2: "swipe + tilt" the front card and return it back.
+     * This is a placeholder effect until real animations are implemented.
+     */
+    fun startAnimation2() {
+        if (!isLaidOut) {
+            post { startAnimation2() }
+            return
+        }
+
+        val front = bindings.getOrNull(2)?.root ?: return
+        if (front.visibility != View.VISIBLE) return
+
+        front.animate().cancel()
+
+        val baseTranslationX = front.translationX
+        val baseRotation = front.rotation
+
+        val swipeDistance = (width.takeIf { it > 0 } ?: front.width).toFloat() * 0.25f
+        val targetTranslationX = baseTranslationX + swipeDistance
+
+        front.animate()
+            .translationX(targetTranslationX)
+            .rotation(baseRotation + 8f)
+            .setDuration(180L)
+            .setInterpolator(AccelerateDecelerateInterpolator())
+            .withEndAction {
+                front.animate()
+                    .translationX(baseTranslationX)
+                    .rotation(baseRotation)
+                    .setDuration(240L)
+                    .setInterpolator(OvershootInterpolator(1.8f))
+                    .start()
+            }
+            .start()
+    }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         var maxChildWidth = 0
