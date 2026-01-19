@@ -8,6 +8,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
+import coil.load
 import ru.kolxz2.chertholder.databinding.ItemCardBinding
 
 class CardStackLayout @JvmOverloads constructor(
@@ -69,6 +70,40 @@ class CardStackLayout @JvmOverloads constructor(
 
         // Default: show all 3 cards.
         setCardCount(visibleCardCount)
+    }
+
+    /**
+     * Display images from URLs. Shows up to 3 images.
+     *
+     * Mapping for UX:
+     * - urls[0] -> front card (index 2)
+     * - urls[1] -> middle card (index 1)
+     * - urls[2] -> back card (index 0)
+     */
+    fun setImageUrls(urls: List<String>) {
+        val limited = urls.take(3)
+
+        // Keep at least 1 card visible (even with 0 URLs) to preserve the layout,
+        // but hide the image when there's nothing to show.
+        val visible = limited.size.coerceIn(1, 3)
+        setCardCount(visible)
+
+        // Clear/hide all images first (important for reuse and partial updates).
+        for (binding in bindings) {
+            binding.imageView.load(null)
+            binding.imageView.visibility = View.GONE
+        }
+
+        // Fill in images using the defined mapping.
+        val targetBindingIndices = intArrayOf(2, 1, 0) // front, middle, back
+        for (i in limited.indices) {
+            val bindingIndex = targetBindingIndices.getOrNull(i) ?: continue
+            val binding = bindings.getOrNull(bindingIndex) ?: continue
+            val url = limited[i]
+
+            binding.imageView.visibility = View.VISIBLE
+            binding.imageView.load(url)
+        }
     }
 
     /**

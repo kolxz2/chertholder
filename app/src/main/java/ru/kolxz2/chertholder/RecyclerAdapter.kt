@@ -4,7 +4,7 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 
 class RecyclerAdapter(
-    private val cardCount: Int = 3
+    private val imageUrls: List<String> = emptyList()
 ) : RecyclerView.Adapter<RecyclerAdapter.RecyclerViewHolder>() {
 
     class RecyclerViewHolder(
@@ -23,7 +23,7 @@ class RecyclerAdapter(
     }
 
     override fun onBindViewHolder(holder: RecyclerViewHolder, position: Int) {
-        holder.stack.setCardCount(cardCount)
+        holder.stack.setImageUrls(imageUrls)
     }
 
     override fun getItemCount(): Int = 1
