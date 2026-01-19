@@ -24,13 +24,7 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
-        val items = listOf(
-            RecyclerItem("Элемент 1", android.R.drawable.ic_menu_gallery),
-            RecyclerItem("Элемент 2", android.R.drawable.ic_menu_gallery),
-            RecyclerItem("Элемент 3", android.R.drawable.ic_menu_gallery)
-        )
-
-        val adapter = RecyclerAdapter(items)
+        val adapter = RecyclerAdapter()
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
         binding.recyclerView.adapter = adapter
     }

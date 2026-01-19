@@ -1,33 +1,31 @@
 package ru.kolxz2.chertholder
 
-import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
-import ru.kolxz2.chertholder.databinding.ItemRecyclerBinding
 
 class RecyclerAdapter(
-    private val items: List<RecyclerItem>
+    private val cardCount: Int = 2
 ) : RecyclerView.Adapter<RecyclerAdapter.RecyclerViewHolder>() {
 
     class RecyclerViewHolder(
-        private val binding: ItemRecyclerBinding
-    ) : RecyclerView.ViewHolder(binding.root) {
-
-        fun bind(item: RecyclerItem) {
-            binding.imageView.setImageResource(item.imageResId)
-        }
-    }
+        val stack: CardStackLayout
+    ) : RecyclerView.ViewHolder(stack)
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerViewHolder {
-        val inflater = LayoutInflater.from(parent.context)
-        val binding = ItemRecyclerBinding.inflate(inflater, parent, false)
-        return RecyclerViewHolder(binding)
+        // One RecyclerView item: the custom ViewGroup itself.
+        val view = CardStackLayout(parent.context).apply {
+            layoutParams = RecyclerView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+        return RecyclerViewHolder(view)
     }
 
     override fun onBindViewHolder(holder: RecyclerViewHolder, position: Int) {
-        holder.bind(items[position])
+        holder.stack.setCardCount(cardCount)
     }
 
-    override fun getItemCount(): Int = items.size
+    override fun getItemCount(): Int = 1
 }
 
