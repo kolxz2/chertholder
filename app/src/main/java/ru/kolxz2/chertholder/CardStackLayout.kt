@@ -7,7 +7,8 @@ import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import ru.kolxz2.chertholder.databinding.ItemRecyclerBinding
+import android.view.animation.DecelerateInterpolator
+import ru.kolxz2.chertholder.databinding.ItemCardBinding
 
 class CardStackLayout @JvmOverloads constructor(
     context: Context,
@@ -27,16 +28,22 @@ class CardStackLayout @JvmOverloads constructor(
     private val offset23Px = dpToPx(7f)
     private val frontTopOffsetPx = offset23Px + offset12Px
 
+    private val scaleBack = 0.64f
+    private val scaleMiddle = 0.8f
+    private val scaleFront = 1.0f
+
+    private var animateNextLayout: Boolean = false
+
     /**
      * Children order is important:
      * - index 0: back card (peeks the most)
      * - index 1: middle card
      * - index 2: front card (drawn last, on top)
      */
-    private val bindings: List<ItemRecyclerBinding> = buildList(3) {
+    private val bindings: List<ItemCardBinding> = buildList(3) {
         val inflater = LayoutInflater.from(context)
         repeat(3) {
-            add(ItemRecyclerBinding.inflate(inflater, this@CardStackLayout, true))
+            add(ItemCardBinding.inflate(inflater, this@CardStackLayout, true))
         }
     }
 
@@ -56,9 +63,9 @@ class CardStackLayout @JvmOverloads constructor(
 
         // Ensure front card is visually on top even with elevations.
         val zStep = dpToPxF(1f)
-        bindings.getOrNull(0)?.cardView?.translationZ = 0f
-        bindings.getOrNull(1)?.cardView?.translationZ = zStep
-        bindings.getOrNull(2)?.cardView?.translationZ = 2f * zStep
+        bindings.getOrNull(0)?.root?.translationZ = 0f
+        bindings.getOrNull(1)?.root?.translationZ = zStep
+        bindings.getOrNull(2)?.root?.translationZ = 2f * zStep
 
         // Default: show all 3 cards.
         setCardCount(visibleCardCount)
@@ -83,6 +90,8 @@ class CardStackLayout @JvmOverloads constructor(
         bindings.getOrNull(1)?.root?.visibility = if (showMiddle) View.VISIBLE else View.GONE
         bindings.getOrNull(2)?.root?.visibility = if (showFront) View.VISIBLE else View.GONE
 
+        // Animate next layout pass when stack composition changes.
+        animateNextLayout = true
         requestLayout()
         invalidate()
     }
@@ -133,21 +142,50 @@ class CardStackLayout @JvmOverloads constructor(
         }
         if (minOffset == Int.MAX_VALUE) minOffset = 0
 
+        val shouldAnimate = animateNextLayout
+        animateNextLayout = false
+
+        val availableWidth = (r - l) - paddingLeft - paddingRight
+
         for (i in 0 until childCount) {
             val child = getChildAt(i)
             if (child.visibility == View.GONE) continue
 
             val lp = child.layoutParams as MarginLayoutParams
 
-            // Shift so that the top-most visible card starts at 0.
-            val topOffset = topOffsetForIndex(i) - minOffset
-
-            val left = paddingLeft + lp.leftMargin
-            val top = paddingTop + topOffset + lp.topMargin
+            // Physically lay out all cards at the same top, centered by X.
+            // Visual depth is done via translationY + scale (animatable properties).
+            val totalWidth = child.measuredWidth + lp.leftMargin + lp.rightMargin
+            val centeredLeft = paddingLeft + ((availableWidth - totalWidth) / 2)
+            val left = centeredLeft + lp.leftMargin
+            val top = paddingTop + lp.topMargin
             val right = left + child.measuredWidth
             val bottom = top + child.measuredHeight
 
             child.layout(left, top, right, bottom)
+
+            // Shift so that the top-most visible card starts at 0.
+            val topOffset = topOffsetForIndex(i) - minOffset
+            val scale = scaleForIndex(i)
+
+            child.pivotX = child.width / 2f
+            child.pivotY = 0f
+
+            if (shouldAnimate && child.isLaidOut) {
+                child.animate()
+                    .cancel()
+                child.animate()
+                    .translationY(topOffset.toFloat())
+                    .scaleX(scale)
+                    .scaleY(scale)
+                    .setDuration(180L)
+                    .setInterpolator(DecelerateInterpolator())
+                    .start()
+            } else {
+                child.translationY = topOffset.toFloat()
+                child.scaleX = scale
+                child.scaleY = scale
+            }
         }
     }
 
@@ -188,6 +226,15 @@ class CardStackLayout @JvmOverloads constructor(
             0 -> 0
             1 -> offset23Px
             else -> frontTopOffsetPx
+        }
+    }
+
+    private fun scaleForIndex(childIndex: Int): Float {
+        // index 0 = back, 1 = middle, 2 = front
+        return when (childIndex) {
+            0 -> scaleBack
+            1 -> scaleMiddle
+            else -> scaleFront
         }
     }
 }

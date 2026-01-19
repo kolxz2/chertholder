@@ -7,8 +7,8 @@
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/cardView"
-        android:layout_width="0dp"
-        android:layout_height="200dp"
+        android:layout_width="280dp"
+        android:layout_height="160dp"
         app:cardCornerRadius="16dp"
         app:cardElevation="4dp"
         app:layout_constraintStart_toStartOf="parent"
@@ -20,8 +20,8 @@
             android:id="@+id/imageView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:scaleType="centerCrop"
-            android:contentDescription="@string/image_description" />
+            android:contentDescription="@string/image_description"
+            android:scaleType="centerCrop" />
 
     </com.google.android.material.card.MaterialCardView>
 
