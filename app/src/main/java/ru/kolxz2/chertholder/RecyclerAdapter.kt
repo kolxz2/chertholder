@@ -14,7 +14,6 @@ class RecyclerAdapter(
     ) : RecyclerView.ViewHolder(binding.root) {
 
         fun bind(item: RecyclerItem) {
-            binding.titleTextView.text = item.title
             binding.imageView.setImageResource(item.imageResId)
         }
     }

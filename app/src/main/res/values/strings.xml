@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">chertholder</string>
+    <string name="image_description">Card image</string>
 </resources>
