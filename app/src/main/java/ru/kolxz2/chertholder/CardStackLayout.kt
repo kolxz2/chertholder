@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
+import androidx.core.view.ViewCompat
 import coil.load
 import ru.kolxz2.chertholder.databinding.ItemCardBinding
 import kotlin.math.roundToInt
@@ -23,11 +24,18 @@ class CardStackLayout @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : ViewGroup(context, attrs, defStyleAttr) {
 
+    private companion object {
+        private const val INDEX_GHOST = 0
+        private const val INDEX_BACK = 1
+        private const val INDEX_MIDDLE = 2
+        private const val INDEX_FRONT = 3
+    }
+
     // Spacing requirements:
     // - between front(1) and middle(2): 10dp
     // - between middle(2) and back(3): 7dp
     //
-    // We layout from back to front:
+   // We layout from back to front:
     // back(3): 0
     // middle(2): 7dp
     // front(1): 7dp + 10dp = 17dp
@@ -39,6 +47,7 @@ class CardStackLayout @JvmOverloads constructor(
     private var currentOffset12Px: Int = baseOffset12Px
     private var currentOffset23Px: Int = baseOffset23Px
 
+    private val scaleGhost = 0.5f
     private val scaleBack = 0.64f
     private val scaleMiddle = 0.8f
     private val scaleFront = 1.0f
@@ -49,13 +58,14 @@ class CardStackLayout @JvmOverloads constructor(
 
     /**
      * Children order is important:
-     * - index 0: back card (peeks the most)
-     * - index 1: middle card
-     * - index 2: front card (drawn last, on top)
+     * - index 0: ghost card (fully invisible, behind all others)
+     * - index 1: back card (peeks the most)
+     * - index 2: middle card
+     * - index 3: front card (drawn last, on top)
      */
-    private val bindings: List<ItemCardBinding> = buildList(3) {
+    private val bindings: List<ItemCardBinding> = buildList(4) {
         val inflater = LayoutInflater.from(context)
-        repeat(3) {
+        repeat(4) {
             add(ItemCardBinding.inflate(inflater, this@CardStackLayout, true))
         }
     }
@@ -76,9 +86,24 @@ class CardStackLayout @JvmOverloads constructor(
 
         // Ensure front card is visually on top even with elevations.
         val zStep = dpToPxF(1f)
-        bindings.getOrNull(0)?.root?.translationZ = 0f
-        bindings.getOrNull(1)?.root?.translationZ = zStep
-        bindings.getOrNull(2)?.root?.translationZ = 2f * zStep
+        bindings.getOrNull(INDEX_GHOST)?.root?.translationZ = 0f
+        bindings.getOrNull(INDEX_BACK)?.root?.translationZ = zStep
+        bindings.getOrNull(INDEX_MIDDLE)?.root?.translationZ = 2f * zStep
+        bindings.getOrNull(INDEX_FRONT)?.root?.translationZ = 3f * zStep
+
+        // Ghost card: always present behind everything, but fully invisible and non-interactive.
+        bindings.getOrNull(INDEX_GHOST)?.let { ghost ->
+            ghost.root.alpha = 0f
+            ghost.root.isClickable = false
+            ghost.root.isFocusable = false
+            ghost.root.isFocusableInTouchMode = false
+            ghost.root.isEnabled = false
+            ViewCompat.setImportantForAccessibility(
+                ghost.root,
+                ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_NO
+            )
+            ghost.imageView.visibility = View.GONE
+        }
 
         // Default: show all 3 cards.
         setCardCount(visibleCardCount)
@@ -88,9 +113,9 @@ class CardStackLayout @JvmOverloads constructor(
      * Display images from URLs. Shows up to 3 images.
      *
      * Mapping for UX:
-     * - urls[0] -> front card (index 2)
-     * - urls[1] -> middle card (index 1)
-     * - urls[2] -> back card (index 0)
+     * - urls[0] -> front card (index 3)
+     * - urls[1] -> middle card (index 2)
+     * - urls[2] -> back card (index 1)
      */
     fun setImageUrls(urls: List<String>, animateLayout: Boolean = true) {
         val limited = urls.take(3)
@@ -107,7 +132,7 @@ class CardStackLayout @JvmOverloads constructor(
         }
 
         // Fill in images using the defined mapping.
-        val targetBindingIndices = intArrayOf(2, 1, 0) // front, middle, back
+        val targetBindingIndices = intArrayOf(INDEX_FRONT, INDEX_MIDDLE, INDEX_BACK) // front, middle, back
         for (i in limited.indices) {
             val bindingIndex = targetBindingIndices.getOrNull(i) ?: continue
             val binding = bindings.getOrNull(bindingIndex) ?: continue
@@ -128,14 +153,16 @@ class CardStackLayout @JvmOverloads constructor(
         val clamped = count.coerceIn(1, 3)
         visibleCardCount = clamped
 
-        // child index: 0=back, 1=middle, 2=front
+        // child index: 0=ghost, 1=back, 2=middle, 3=front
         val showBack = visibleCardCount >= 3
         val showMiddle = visibleCardCount >= 2
         val showFront = true
 
-        bindings.getOrNull(0)?.root?.visibility = if (showBack) View.VISIBLE else View.GONE
-        bindings.getOrNull(1)?.root?.visibility = if (showMiddle) View.VISIBLE else View.GONE
-        bindings.getOrNull(2)?.root?.visibility = if (showFront) View.VISIBLE else View.GONE
+        // Ghost is always present but invisible (alpha=0) and should not affect layout math.
+        bindings.getOrNull(INDEX_GHOST)?.root?.visibility = View.VISIBLE
+        bindings.getOrNull(INDEX_BACK)?.root?.visibility = if (showBack) View.VISIBLE else View.GONE
+        bindings.getOrNull(INDEX_MIDDLE)?.root?.visibility = if (showMiddle) View.VISIBLE else View.GONE
+        bindings.getOrNull(INDEX_FRONT)?.root?.visibility = if (showFront) View.VISIBLE else View.GONE
 
         // Animate next layout pass when stack composition changes.
         animateNextLayout = animateLayout
@@ -262,7 +289,7 @@ class CardStackLayout @JvmOverloads constructor(
             return
         }
 
-        val front = bindings.getOrNull(2)?.root ?: return
+        val front = bindings.getOrNull(INDEX_FRONT)?.root ?: return
         if (front.visibility != View.VISIBLE) return
 
         front.animate().cancel()
@@ -305,9 +332,12 @@ class CardStackLayout @JvmOverloads constructor(
             maxChildWidth = maxOf(maxChildWidth, childWidth)
             maxChildHeight = maxOf(maxChildHeight, childHeight)
 
-            val offset = topOffsetForIndex(i)
-            minOffset = minOf(minOffset, offset)
-            maxOffset = maxOf(maxOffset, offset)
+            // Ghost card must not affect the measured height of the visible stack.
+            if (i != INDEX_GHOST) {
+                val offset = topOffsetForIndex(i)
+                minOffset = minOf(minOffset, offset)
+                maxOffset = maxOf(maxOffset, offset)
+            }
         }
 
         val desiredWidth = paddingLeft + maxChildWidth + paddingRight
@@ -356,13 +386,28 @@ class CardStackLayout @JvmOverloads constructor(
         for (i in 0 until childCount) {
             val child = getChildAt(i)
             if (child.visibility == View.GONE) continue
-            minOffset = minOf(minOffset, topOffsetForIndex(i))
+            // Ghost card must not affect the normalization of translationY for visible cards.
+            if (i != INDEX_GHOST) {
+                minOffset = minOf(minOffset, topOffsetForIndex(i))
+            }
         }
         if (minOffset == Int.MAX_VALUE) minOffset = 0
 
         for (i in 0 until childCount) {
             val child = getChildAt(i)
             if (child.visibility == View.GONE) continue
+
+            if (i == INDEX_GHOST) {
+                // Keep ghost at a fixed position/scale and fully invisible.
+                child.pivotX = child.width / 2f
+                child.pivotY = 0f
+                child.animate().cancel()
+                child.translationY = 0f
+                child.scaleX = scaleGhost
+                child.scaleY = scaleGhost
+                child.alpha = 0f
+                continue
+            }
 
             // Shift so that the top-most visible card starts at 0.
             val topOffset = topOffsetForIndex(i) - minOffset
@@ -377,6 +422,7 @@ class CardStackLayout @JvmOverloads constructor(
                     .translationY(topOffset.toFloat())
                     .scaleX(scale)
                     .scaleY(scale)
+                    .alpha(1f)
                     .setDuration(180L)
                     .setInterpolator(DecelerateInterpolator())
                     .start()
@@ -384,6 +430,7 @@ class CardStackLayout @JvmOverloads constructor(
                 child.translationY = topOffset.toFloat()
                 child.scaleX = scale
                 child.scaleY = scale
+                child.alpha = 1f
             }
         }
     }
@@ -426,17 +473,19 @@ class CardStackLayout @JvmOverloads constructor(
 
     private fun topOffsetForIndex(childIndex: Int): Int {
         return when (childIndex) {
-            0 -> 0
-            1 -> currentOffset23Px
+            INDEX_GHOST -> 0
+            INDEX_BACK -> 0
+            INDEX_MIDDLE -> currentOffset23Px
             else -> currentOffset23Px + currentOffset12Px
         }
     }
 
     private fun scaleForIndex(childIndex: Int): Float {
-        // index 0 = back, 1 = middle, 2 = front
+        // index 0 = ghost, 1 = back, 2 = middle, 3 = front
         return when (childIndex) {
-            0 -> scaleBack
-            1 -> scaleMiddle
+            INDEX_GHOST -> scaleGhost
+            INDEX_BACK -> scaleBack
+            INDEX_MIDDLE -> scaleMiddle
             else -> scaleFront
         }
     }
