@@ -36,7 +36,8 @@ class MainActivity : AppCompatActivity() {
         val replacementUrls = listOf(
             "https://storage-api.petstory.ru/resize/0x0x100/07/e2/bb/07e2bb0a343f4874979064b4e4066d96.jpeg",
             "https://storage-api.petstory.ru/resize/0x0x100/14/09/a3/1409a33b47794d7eb21d05b6120856c8.jpeg",
-            "https://storage-api.petstory.ru/resize/0x0x100/64/fa/44/64fa440130a54c849ab1742035ae0a39.jpeg"
+            "https://storage-api.petstory.ru/resize/0x0x100/64/fa/44/64fa440130a54c849ab1742035ae0a39.jpeg",
+            "http://bibliobel.ru/media/k2/items/cache/52ec984cc72302fd412e2aa145a6526c_XL.jpg"
         )
 
         // Track what data set is currently shown in the stack.

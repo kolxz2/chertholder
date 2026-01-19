@@ -52,9 +52,13 @@ class CardStackLayout @JvmOverloads constructor(
     private val scaleMiddle = 0.8f
     private val scaleFront = 1.0f
 
+    // Animation #3 tuning (do NOT use CubicBezierInterpolator here).
+    private val animation3DurationMs = 2040L
+
     private var animateNextLayout: Boolean = false
     private var isCollapsed: Boolean = false
     private var spacingAnimator: ValueAnimator? = null
+    private var isAnimation3Running: Boolean = false
 
     /**
      * Children order is important:
@@ -63,14 +67,15 @@ class CardStackLayout @JvmOverloads constructor(
      * - index 2: middle card
      * - index 3: front card (drawn last, on top)
      */
-    private val bindings: List<ItemCardBinding> = buildList(4) {
+    private val bindings: MutableList<ItemCardBinding> = buildList(4) {
         val inflater = LayoutInflater.from(context)
         repeat(4) {
             add(ItemCardBinding.inflate(inflater, this@CardStackLayout, true))
         }
-    }
+    }.toMutableList()
 
     private var visibleCardCount: Int = 3
+    private val deckUrls: MutableList<String> = mutableListOf()
 
     init {
         // Debug visuals: paint cards with different colors (no images for now).
@@ -84,26 +89,13 @@ class CardStackLayout @JvmOverloads constructor(
             binding.cardView.setCardBackgroundColor(colors[index % colors.size])
         }
 
-        // Ensure front card is visually on top even with elevations.
-        val zStep = dpToPxF(1f)
-        bindings.getOrNull(INDEX_GHOST)?.root?.translationZ = 0f
-        bindings.getOrNull(INDEX_BACK)?.root?.translationZ = zStep
-        bindings.getOrNull(INDEX_MIDDLE)?.root?.translationZ = 2f * zStep
-        bindings.getOrNull(INDEX_FRONT)?.root?.translationZ = 3f * zStep
+        applyZOrder()
 
-        // Ghost card: always present behind everything, but fully invisible and non-interactive.
-        bindings.getOrNull(INDEX_GHOST)?.let { ghost ->
-            ghost.root.alpha = 0f
-            ghost.root.isClickable = false
-            ghost.root.isFocusable = false
-            ghost.root.isFocusableInTouchMode = false
-            ghost.root.isEnabled = false
-            ViewCompat.setImportantForAccessibility(
-                ghost.root,
-                ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_NO
-            )
-            ghost.imageView.visibility = View.GONE
-        }
+        // Configure roles.
+        bindings.getOrNull(INDEX_GHOST)?.let(::configureAsGhost)
+        bindings.getOrNull(INDEX_BACK)?.let(::configureAsCard)
+        bindings.getOrNull(INDEX_MIDDLE)?.let(::configureAsCard)
+        bindings.getOrNull(INDEX_FRONT)?.let(::configureAsCard)
 
         // Default: show all 3 cards.
         setCardCount(visibleCardCount)
@@ -118,6 +110,9 @@ class CardStackLayout @JvmOverloads constructor(
      * - urls[2] -> back card (index 1)
      */
     fun setImageUrls(urls: List<String>, animateLayout: Boolean = true) {
+        deckUrls.clear()
+        deckUrls.addAll(urls)
+
         val limited = urls.take(3)
 
         // Keep at least 1 card visible (even with 0 URLs) to preserve the layout,
@@ -138,9 +133,17 @@ class CardStackLayout @JvmOverloads constructor(
             val binding = bindings.getOrNull(bindingIndex) ?: continue
             val url = limited[i]
 
-            binding.imageView.visibility = View.VISIBLE
-            binding.imageView.load(url)
+            if (url.isBlank()) {
+                binding.imageView.visibility = View.GONE
+            } else {
+                binding.imageView.visibility = View.VISIBLE
+                binding.imageView.load(url)
+            }
         }
+
+        // Preload the incoming card into the ghost view (still invisible).
+        // This enables animation #3 to bring a "new back" card without hard swaps.
+        prepareGhostForIncomingBack()
     }
 
     /**
@@ -280,8 +283,17 @@ class CardStackLayout @JvmOverloads constructor(
     }
 
     /**
-     * Animation #3 (temporary): "swipe + tilt" the front card and return it back.
-     * This reuses the old placeholder effect that previously lived in animation #2.
+     * Animation #3: scroll the card stack by 1 position.
+     *
+     * Visual contract (for 3 visible cards):
+     * - front drops down and disappears
+     * - middle grows into front
+     * - back grows into middle
+     * - ghost (4th) smoothly "floats up" into back (3rd) position
+     *
+     * Implementation note:
+     * - During the animation we use only View property animations (translation/scale/alpha).
+     * - We rotate view roles (child order) only after the animation completes.
      */
     fun startAnimation3() {
         if (!isLaidOut) {
@@ -289,29 +301,96 @@ class CardStackLayout @JvmOverloads constructor(
             return
         }
 
-        val front = bindings.getOrNull(INDEX_FRONT)?.root ?: return
+        // This animation is designed for the 3-card stack (front/middle/back + ghost).
+        // For 1..2 cards, do nothing (but stay safe).
+        if (visibleCardCount < 3) return
+        if (isAnimation3Running) return
+        isAnimation3Running = true
+
+        // Cancel stack-spacing animation and any per-card property animations.
+        spacingAnimator?.cancel()
+        spacingAnimator = null
+        for (binding in bindings) {
+            binding.root.animate().cancel()
+        }
+
+        val ghostBinding = bindings.getOrNull(INDEX_GHOST) ?: return
+        val backBinding = bindings.getOrNull(INDEX_BACK) ?: return
+        val middleBinding = bindings.getOrNull(INDEX_MIDDLE) ?: return
+        val frontBinding = bindings.getOrNull(INDEX_FRONT) ?: return
+
+        val ghost = ghostBinding.root
+        val back = backBinding.root
+        val middle = middleBinding.root
+        val front = frontBinding.root
+
         if (front.visibility != View.VISIBLE) return
+        if (visibleCardCount >= 2 && middle.visibility != View.VISIBLE) return
+        if (visibleCardCount >= 3 && back.visibility != View.VISIBLE) return
 
-        front.animate().cancel()
+        // Ensure ghost has correct incoming content.
+        prepareGhostForIncomingBack()
+        ghost.visibility = View.VISIBLE
 
-        val baseTranslationX = front.translationX
-        val baseRotation = front.rotation
+        val frontY = front.translationY
+        val middleY = middle.translationY
+        val backY = back.translationY
+        val frontScale = front.scaleX
+        val middleScale = middle.scaleX
+        val backScale = back.scaleX
 
-        val swipeDistance = (width.takeIf { it > 0 } ?: front.width).toFloat() * 0.25f
-        val targetTranslationX = baseTranslationX + swipeDistance
+        // Card #4 must slide into position #3 (no fade-in):
+        // place it below the stack so it enters by translationY only.
+        val ghostStartOffset = height.toFloat() + dpToPxF(24f)
+        ghost.translationY = backY + ghostStartOffset
+        ghost.scaleX = scaleGhost
+        ghost.scaleY = scaleGhost
+        ghost.alpha = 1f
 
+        val dropBy = height.toFloat() + dpToPxF(24f)
+        val duration = animation3DurationMs
+        val interpolator = AccelerateDecelerateInterpolator()
+
+        // Shift cards forward in the stack:
+        // middle -> front, back -> middle, ghost -> back
+        if (visibleCardCount >= 2) {
+            middle.animate()
+                .translationY(frontY)
+                .scaleX(frontScale)
+                .scaleY(frontScale)
+                .alpha(1f)
+                .setDuration(duration)
+                .setInterpolator(interpolator)
+                .start()
+        }
+
+        if (visibleCardCount >= 3) {
+            back.animate()
+                .translationY(middleY)
+                .scaleX(middleScale)
+                .scaleY(middleScale)
+                .alpha(1f)
+                .setDuration(duration)
+                .setInterpolator(interpolator)
+                .start()
+
+            ghost.animate()
+                .translationY(backY)
+                .scaleX(backScale)
+                .scaleY(backScale)
+                .setDuration(duration)
+                .setInterpolator(interpolator)
+                .start()
+        }
+
+        // Front card drops down and disappears.
         front.animate()
-            .translationX(targetTranslationX)
-            .rotation(baseRotation + 8f)
-            .setDuration(180L)
-            .setInterpolator(AccelerateDecelerateInterpolator())
+            .translationY(frontY + dropBy)
+            .setDuration(duration)
+            .setInterpolator(interpolator)
             .withEndAction {
-                front.animate()
-                    .translationX(baseTranslationX)
-                    .rotation(baseRotation)
-                    .setDuration(240L)
-                    .setInterpolator(OvershootInterpolator(1.8f))
-                    .start()
+                isAnimation3Running = false
+                rotateRolesAfterScroll()
             }
             .start()
     }
@@ -398,6 +477,14 @@ class CardStackLayout @JvmOverloads constructor(
             if (child.visibility == View.GONE) continue
 
             if (i == INDEX_GHOST) {
+                if (isAnimation3Running) {
+                    // During animation #3, the ghost card is temporarily animated as a real card
+                    // (it slides into the back position). Do not override its properties here,
+                    // otherwise it will flicker due to alpha/translation resets.
+                    child.pivotX = child.width / 2f
+                    child.pivotY = 0f
+                    continue
+                }
                 // Keep ghost at a fixed position/scale and fully invisible.
                 child.pivotX = child.width / 2f
                 child.pivotY = 0f
@@ -488,6 +575,109 @@ class CardStackLayout @JvmOverloads constructor(
             INDEX_MIDDLE -> scaleMiddle
             else -> scaleFront
         }
+    }
+
+    private fun applyZOrder() {
+        val zStep = dpToPxF(1f)
+        bindings.getOrNull(INDEX_GHOST)?.root?.translationZ = 0f
+        bindings.getOrNull(INDEX_BACK)?.root?.translationZ = zStep
+        bindings.getOrNull(INDEX_MIDDLE)?.root?.translationZ = 2f * zStep
+        bindings.getOrNull(INDEX_FRONT)?.root?.translationZ = 3f * zStep
+    }
+
+    private fun configureAsGhost(binding: ItemCardBinding) {
+        binding.root.alpha = 0f
+        binding.root.isClickable = false
+        binding.root.isFocusable = false
+        binding.root.isFocusableInTouchMode = false
+        binding.root.isEnabled = false
+        ViewCompat.setImportantForAccessibility(
+            binding.root,
+            ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_NO
+        )
+        // Image may be preloaded for animation, keep it hidden by alpha=0 on the root.
+    }
+
+    private fun configureAsCard(binding: ItemCardBinding) {
+        binding.root.isEnabled = true
+        // Keep cards non-clickable so they don't steal RecyclerView scroll gestures by default.
+        binding.root.isClickable = false
+        binding.root.isFocusable = false
+        binding.root.isFocusableInTouchMode = false
+        ViewCompat.setImportantForAccessibility(
+            binding.root,
+            ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+        )
+    }
+
+    private fun incomingBackUrl(): String? {
+        if (deckUrls.isEmpty()) return null
+        val candidate = deckUrls.getOrNull(3)
+        if (!candidate.isNullOrBlank()) return candidate
+        val fallback = deckUrls.getOrNull(0)
+        return fallback?.takeIf { it.isNotBlank() }
+    }
+
+    private fun prepareGhostForIncomingBack() {
+        val ghost = bindings.getOrNull(INDEX_GHOST) ?: return
+        val url = incomingBackUrl()
+        if (url.isNullOrBlank()) {
+            ghost.imageView.load(null)
+            ghost.imageView.visibility = View.GONE
+        } else {
+            ghost.imageView.visibility = View.VISIBLE
+            ghost.imageView.load(url)
+        }
+        // Keep ghost invisible at rest; animation3 will fade it in.
+        ghost.root.alpha = 0f
+        ghost.root.visibility = View.VISIBLE
+        configureAsGhost(ghost)
+    }
+
+    private fun rotateDeckUrlsLeft() {
+        if (deckUrls.size <= 1) return
+        val first = deckUrls.removeAt(0)
+        deckUrls.add(first)
+    }
+
+    private fun rotateRolesAfterScroll() {
+        val oldGhost = bindings.getOrNull(INDEX_GHOST) ?: return
+        val oldBack = bindings.getOrNull(INDEX_BACK) ?: return
+        val oldMiddle = bindings.getOrNull(INDEX_MIDDLE) ?: return
+        val oldFront = bindings.getOrNull(INDEX_FRONT) ?: return
+
+        // Rotate bindings order: [ghost, back, middle, front] -> [front, ghost, back, middle]
+        bindings.clear()
+        bindings.add(oldFront)
+        bindings.add(oldGhost)
+        bindings.add(oldBack)
+        bindings.add(oldMiddle)
+
+        // Rotate children order in the ViewGroup to match binding indices.
+        removeAllViews()
+        addView(oldFront.root)
+        addView(oldGhost.root)
+        addView(oldBack.root)
+        addView(oldMiddle.root)
+
+        // Update Z so new front is on top.
+        applyZOrder()
+
+        // Rotate data so the next "incoming back" will be correct.
+        rotateDeckUrlsLeft()
+
+        // Re-configure roles (important: old ghost becomes a visible card).
+        bindings.getOrNull(INDEX_GHOST)?.let(::configureAsGhost)
+        bindings.getOrNull(INDEX_BACK)?.let(::configureAsCard)
+        bindings.getOrNull(INDEX_MIDDLE)?.let(::configureAsCard)
+        bindings.getOrNull(INDEX_FRONT)?.let(::configureAsCard)
+
+        // Restore canonical stack transforms and ghost state.
+        setCardCount(visibleCardCount, animateLayout = false)
+        prepareGhostForIncomingBack()
+        applyStackTransforms(shouldAnimate = false)
+        requestLayout()
+        invalidate()
     }
 }
 
