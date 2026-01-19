@@ -1,5 +1,8 @@
 package ru.kolxz2.chertholder
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Color
 import android.util.AttributeSet
@@ -12,6 +15,7 @@ import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import coil.load
 import ru.kolxz2.chertholder.databinding.ItemCardBinding
+import kotlin.math.roundToInt
 
 class CardStackLayout @JvmOverloads constructor(
     context: Context,
@@ -27,15 +31,21 @@ class CardStackLayout @JvmOverloads constructor(
     // back(3): 0
     // middle(2): 7dp
     // front(1): 7dp + 10dp = 17dp
-    private val offset12Px = dpToPx(10f)
-    private val offset23Px = dpToPx(7f)
-    private val frontTopOffsetPx = offset23Px + offset12Px
+    private val baseOffset12Px = dpToPx(10f)
+    private val baseOffset23Px = dpToPx(7f)
+    private val collapsedOffset12Px = dpToPx(4f)
+    private val collapsedOffset23Px = dpToPx(3f)
+
+    private var currentOffset12Px: Int = baseOffset12Px
+    private var currentOffset23Px: Int = baseOffset23Px
 
     private val scaleBack = 0.64f
     private val scaleMiddle = 0.8f
     private val scaleFront = 1.0f
 
     private var animateNextLayout: Boolean = false
+    private var isCollapsed: Boolean = false
+    private var spacingAnimator: ValueAnimator? = null
 
     /**
      * Children order is important:
@@ -181,12 +191,74 @@ class CardStackLayout @JvmOverloads constructor(
     }
 
     /**
-     * Temporary animation #2: "swipe + tilt" the front card and return it back.
-     * This is a placeholder effect until real animations are implemented.
+     * Animation #2: toggle stack spacing.
+     *
+     * Collapsed state:
+     * - between front(1) and middle(2): 4dp
+     * - between middle(2) and back(3): 3dp
+     *
+     * Expanded state restores the default: 10dp / 7dp.
      */
     fun startAnimation2() {
         if (!isLaidOut) {
             post { startAnimation2() }
+            return
+        }
+
+        // Cancel any ongoing stack-spacing animation.
+        spacingAnimator?.cancel()
+        spacingAnimator = null
+
+        // Cancel any per-card property animations (we will drive translationY directly).
+        for (i in 0 until childCount) {
+            getChildAt(i)?.animate()?.cancel()
+        }
+
+        val targetCollapsed = !isCollapsed
+        isCollapsed = targetCollapsed
+
+        val start12 = currentOffset12Px
+        val start23 = currentOffset23Px
+        val end12 = if (targetCollapsed) collapsedOffset12Px else baseOffset12Px
+        val end23 = if (targetCollapsed) collapsedOffset23Px else baseOffset23Px
+
+        val interpolator = CubicBezierInterpolator(
+            0.34f, 1.56f,
+            0.64f, 1f
+        )
+
+        spacingAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 260L
+            this.interpolator = interpolator
+            addUpdateListener { animator ->
+                val t = animator.animatedValue as Float
+                currentOffset12Px = lerpInt(start12, end12, t)
+                currentOffset23Px = lerpInt(start23, end23, t)
+                applyStackTransforms(shouldAnimate = false)
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    currentOffset12Px = end12
+                    currentOffset23Px = end23
+                    spacingAnimator = null
+                    applyStackTransforms(shouldAnimate = false)
+                }
+
+                override fun onAnimationCancel(animation: Animator) {
+                    spacingAnimator = null
+                }
+            })
+            start()
+        }
+    }
+
+    /**
+     * Animation #3 (temporary): "swipe + tilt" the front card and return it back.
+     * This reuses the old placeholder effect that previously lived in animation #2.
+     */
+    fun startAnimation3() {
+        if (!isLaidOut) {
+            post { startAnimation3() }
             return
         }
 
@@ -253,14 +325,6 @@ class CardStackLayout @JvmOverloads constructor(
     }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
-        var minOffset = Int.MAX_VALUE
-        for (i in 0 until childCount) {
-            val child = getChildAt(i)
-            if (child.visibility == View.GONE) continue
-            minOffset = minOf(minOffset, topOffsetForIndex(i))
-        }
-        if (minOffset == Int.MAX_VALUE) minOffset = 0
-
         val shouldAnimate = animateNextLayout
         animateNextLayout = false
 
@@ -282,6 +346,23 @@ class CardStackLayout @JvmOverloads constructor(
             val bottom = top + child.measuredHeight
 
             child.layout(left, top, right, bottom)
+        }
+
+        applyStackTransforms(shouldAnimate = shouldAnimate)
+    }
+
+    private fun applyStackTransforms(shouldAnimate: Boolean) {
+        var minOffset = Int.MAX_VALUE
+        for (i in 0 until childCount) {
+            val child = getChildAt(i)
+            if (child.visibility == View.GONE) continue
+            minOffset = minOf(minOffset, topOffsetForIndex(i))
+        }
+        if (minOffset == Int.MAX_VALUE) minOffset = 0
+
+        for (i in 0 until childCount) {
+            val child = getChildAt(i)
+            if (child.visibility == View.GONE) continue
 
             // Shift so that the top-most visible card starts at 0.
             val topOffset = topOffsetForIndex(i) - minOffset
@@ -291,8 +372,7 @@ class CardStackLayout @JvmOverloads constructor(
             child.pivotY = 0f
 
             if (shouldAnimate && child.isLaidOut) {
-                child.animate()
-                    .cancel()
+                child.animate().cancel()
                 child.animate()
                     .translationY(topOffset.toFloat())
                     .scaleX(scale)
@@ -340,11 +420,15 @@ class CardStackLayout @JvmOverloads constructor(
         )
     }
 
+    private fun lerpInt(start: Int, end: Int, t: Float): Int {
+        return (start + (end - start) * t).roundToInt()
+    }
+
     private fun topOffsetForIndex(childIndex: Int): Int {
         return when (childIndex) {
             0 -> 0
-            1 -> offset23Px
-            else -> frontTopOffsetPx
+            1 -> currentOffset23Px
+            else -> currentOffset23Px + currentOffset12Px
         }
     }
 
@@ -357,4 +441,5 @@ class CardStackLayout @JvmOverloads constructor(
         }
     }
 }
+
 
