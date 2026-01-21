@@ -26,8 +26,8 @@ class CardholderLayout @JvmOverloads constructor(
 
         private const val BASE_OFFSET_12_DP = 10f
         private const val BASE_OFFSET_23_DP = 7f
-        private const val COLLAPSED_OFFSET_12_DP = 4f
-        private const val COLLAPSED_OFFSET_23_DP = 3f
+        private const val COLLAPSED_OFFSET_12_DP = 8f
+        private const val COLLAPSED_OFFSET_23_DP = 5f
 
         private const val SCALE_GHOST = 0.5f
         private const val SCALE_BACK = 0.64f
