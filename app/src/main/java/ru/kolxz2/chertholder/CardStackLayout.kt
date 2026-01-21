@@ -1,22 +1,10 @@
 package ru.kolxz2.chertholder
 
-import android.animation.Animator
-import android.animation.AnimatorListenerAdapter
-import android.animation.ValueAnimator
 import android.content.Context
 import android.util.AttributeSet
 import android.util.TypedValue
-import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
-import android.view.animation.AccelerateDecelerateInterpolator
-import android.view.animation.DecelerateInterpolator
-import android.view.animation.OvershootInterpolator
 import androidx.core.view.isGone
-import coil.load
-import ru.kolxz2.chertholder.databinding.MainPageFocusAccountCardBinding
-import kotlin.math.roundToInt
-import androidx.core.view.isVisible
 
 class CardStackLayout @JvmOverloads constructor(
     context: Context,
@@ -25,18 +13,16 @@ class CardStackLayout @JvmOverloads constructor(
 ) : ViewGroup(context, attrs, defStyleAttr) {
 
     private companion object {
-        private const val INDEX_GHOST = 0
-        private const val INDEX_BACK = 1
-        private const val INDEX_MIDDLE = 2
-        private const val INDEX_FRONT = 3
+        private const val INDEX_GHOST = CardStackSlots.INDEX_GHOST
+        private const val INDEX_BACK = CardStackSlots.INDEX_BACK
+        private const val INDEX_MIDDLE = CardStackSlots.INDEX_MIDDLE
+        private const val INDEX_FRONT = CardStackSlots.INDEX_FRONT
 
-        private const val TOTAL_CARD_COUNT = 4
         private const val MAX_VISIBLE_CARDS = 3
         private const val MIN_VISIBLE_CARDS = 0
         private const val MIN_CARDS_FOR_FRONT = 1
         private const val MIN_CARDS_FOR_MIDDLE = 2
         private const val MIN_CARDS_FOR_BACK = 3
-        private const val MIN_DECK_SIZE_FOR_ROTATION = 1
 
         private const val BASE_OFFSET_12_DP = 10f
         private const val BASE_OFFSET_23_DP = 7f
@@ -70,9 +56,6 @@ class CardStackLayout @JvmOverloads constructor(
 
         private const val Z_ORDER_STEP_DP = 1f
 
-        private const val DECK_URL_NEXT_CANDIDATE_INDEX = 3
-        private const val DECK_URL_FALLBACK_INDEX = 0
-
         private const val PIVOT_Y_TOP = 0f
         private const val PIVOT_X_CENTER_DIVISOR = 2f
     }
@@ -81,319 +64,114 @@ class CardStackLayout @JvmOverloads constructor(
     private var currentOffset23Px: Int = dpToPx(BASE_OFFSET_23_DP)
 
     private var animateNextLayout: Boolean = false
-    private var isCollapsed: Boolean = false
-    private var spacingAnimator: ValueAnimator? = null
-    private var isAnimation3Running: Boolean = false
 
-    private val bindings: MutableList<MainPageFocusAccountCardBinding> = buildList(TOTAL_CARD_COUNT) {
-        val inflater = LayoutInflater.from(context)
-        repeat(TOTAL_CARD_COUNT) {
-            add(MainPageFocusAccountCardBinding.inflate(inflater, this@CardStackLayout, true))
-        }
-    }.toMutableList()
+    private val slots: CardStackSlots = CardStackSlots(context = context, parent = this)
 
     private var visibleCardCount: Int = MAX_VISIBLE_CARDS
-    private val deckUrls: MutableList<String> = mutableListOf()
+    private val deck: CardStackDeck = CardStackDeck()
+    private val transforms: CardStackTransforms by lazy {
+        CardStackTransforms(
+            container = this,
+            config = CardStackTransforms.Config(
+                indexGhost = INDEX_GHOST,
+                indexBack = INDEX_BACK,
+                indexMiddle = INDEX_MIDDLE,
+                indexFront = INDEX_FRONT,
+                scaleGhost = SCALE_GHOST,
+                scaleBack = SCALE_BACK,
+                scaleMiddle = SCALE_MIDDLE,
+                scaleFront = SCALE_FRONT,
+                alphaBack = ALPHA_BACK,
+                alphaMiddle = ALPHA_MIDDLE,
+                alphaFront = ALPHA_FRONT,
+                alphaDefault = ALPHA_DEFAULT,
+                alphaHidden = ALPHA_HIDDEN,
+                stackTransformDurationMs = STACK_TRANSFORM_DURATION_MS,
+                pivotYTop = PIVOT_Y_TOP,
+                pivotXCenterDivisor = PIVOT_X_CENTER_DIVISOR,
+            ),
+        )
+    }
+
+    private val animator: CardStackAnimator by lazy {
+        CardStackAnimator(
+            container = this,
+            slots = slots,
+            deck = deck,
+            config = CardStackAnimator.Config(
+                maxVisibleCards = MAX_VISIBLE_CARDS,
+                minCardsForMiddle = MIN_CARDS_FOR_MIDDLE,
+                minCardsForBack = MIN_CARDS_FOR_BACK,
+                baseOffset12Dp = BASE_OFFSET_12_DP,
+                baseOffset23Dp = BASE_OFFSET_23_DP,
+                collapsedOffset12Dp = COLLAPSED_OFFSET_12_DP,
+                collapsedOffset23Dp = COLLAPSED_OFFSET_23_DP,
+                scaleGhost = SCALE_GHOST,
+                alphaBack = ALPHA_BACK,
+                alphaMiddle = ALPHA_MIDDLE,
+                alphaFront = ALPHA_FRONT,
+                animation3DurationMs = ANIMATION_3_DURATION_MS,
+                cardChangeDropDurationMs = CARD_CHANGE_DROP_DURATION_MS,
+                cardChangeRiseDurationMs = CARD_CHANGE_RISE_DURATION_MS,
+                compressAnimationDurationMs = COMPRESS_ANIMATION_DURATION_MS,
+                overshootTension = OVERSHOOT_TENSION,
+                cubicBezierX1 = CUBIC_BEZIER_X1,
+                cubicBezierY1 = CUBIC_BEZIER_Y1,
+                cubicBezierX2 = CUBIC_BEZIER_X2,
+                cubicBezierY2 = CUBIC_BEZIER_Y2,
+                cardDropExtraDp = CARD_DROP_EXTRA_DP,
+            ),
+            getVisibleCardCount = { visibleCardCount },
+            getCurrentOffset12Px = { currentOffset12Px },
+            getCurrentOffset23Px = { currentOffset23Px },
+            setCurrentOffsetsPx = { offset12Px, offset23Px ->
+                currentOffset12Px = offset12Px
+                currentOffset23Px = offset23Px
+            },
+            applyStackTransforms = { shouldAnimate ->
+                transforms.apply(
+                    shouldAnimate = shouldAnimate,
+                    isFocusAnimationRunning = animator.isFocusAnimationRunning,
+                    currentOffset12Px = currentOffset12Px,
+                    currentOffset23Px = currentOffset23Px,
+                )
+            },
+            setImageUrls = { urls, animateLayout -> setImageUrls(urls, animateLayout) },
+            rotateRolesAfterScroll = { rotateRolesAfterScroll() },
+            dpToPx = { dp -> dpToPx(dp) },
+            dpToPxF = { dp -> dpToPxF(dp) },
+        )
+    }
 
     init {
         applyZOrder()
-
-        bindings.getOrNull(INDEX_GHOST)?.let(::configureAsGhost)
-        bindings.getOrNull(INDEX_BACK)?.let(::configureAsCard)
-        bindings.getOrNull(INDEX_MIDDLE)?.let(::configureAsCard)
-        bindings.getOrNull(INDEX_FRONT)?.let(::configureAsCard)
+        slots.configureInitialRoles()
 
         // Initially ничего не показываем до прихода данных.
         updateVisibleCardsForCount(MIN_VISIBLE_CARDS, animateLayout = false)
     }
 
     fun setImageUrls(urls: List<String>, animateLayout: Boolean = true) {
-        deckUrls.clear()
-        deckUrls.addAll(urls)
+        deck.setUrls(urls)
 
-        val limited = urls.take(MAX_VISIBLE_CARDS)
+        val limited = deck.visibleUrls(MAX_VISIBLE_CARDS)
 
         visibleCardCount = limited.size.coerceIn(MIN_VISIBLE_CARDS, MAX_VISIBLE_CARDS)
         updateVisibleCardsForCount(visibleCardCount, animateLayout = animateLayout)
 
-        for (binding in bindings) {
-            binding.cardImage.load(null)
-            binding.cardImage.visibility = GONE
-        }
-
-        val targetBindingIndices = intArrayOf(INDEX_FRONT, INDEX_MIDDLE, INDEX_BACK)
-        for (i in limited.indices) {
-            val bindingIndex = targetBindingIndices.getOrNull(i) ?: continue
-            val binding = bindings.getOrNull(bindingIndex) ?: continue
-            val url = limited[i]
-
-            if (url.isBlank()) {
-                binding.cardImage.visibility = GONE
-            } else {
-                binding.cardImage.visibility = VISIBLE
-                binding.cardImage.load(url)
-            }
-        }
-
-        prepareGhostForIncomingBack()
+        deck.bindVisibleUrlsToSlots(slots, maxVisibleCards = MAX_VISIBLE_CARDS)
     }
 
     fun animateCardChange(newUrls: List<String>) {
-        if (!isLaidOut) {
-            post { animateCardChange(newUrls) }
-            return
-        }
-
-        for (i in 0 until childCount) {
-            getChildAt(i)?.animate()?.cancel()
-        }
-
-        val baseY = translationY
-        val extraDrop = dpToPxF(CARD_DROP_EXTRA_DP)
-        val dropTo = baseY + height.toFloat() + extraDrop
-
-        animate().cancel()
-        animate()
-            .translationY(dropTo)
-            .setDuration(CARD_CHANGE_DROP_DURATION_MS)
-            .setInterpolator(AccelerateDecelerateInterpolator())
-            .withEndAction {
-                setImageUrls(newUrls, animateLayout = false)
-
-                post {
-                    animate().cancel()
-                    animate()
-                        .translationY(baseY)
-                        .setDuration(CARD_CHANGE_RISE_DURATION_MS)
-                        .setInterpolator(OvershootInterpolator(OVERSHOOT_TENSION))
-                        .start()
-                }
-            }
-            .start()
+        animator.animateCardChange(newUrls)
     }
 
     fun animateCompress() {
-        if (!isLaidOut) {
-            post { animateCompress() }
-            return
-        }
-
-        spacingAnimator?.cancel()
-        spacingAnimator = null
-
-        for (i in 0 until childCount) {
-            getChildAt(i)?.animate()?.cancel()
-        }
-
-        val targetCollapsed = !isCollapsed
-        isCollapsed = targetCollapsed
-
-        val start12 = currentOffset12Px
-        val start23 = currentOffset23Px
-        val end12 = if (targetCollapsed) {
-            dpToPx(COLLAPSED_OFFSET_12_DP)
-        } else {
-            dpToPx(BASE_OFFSET_12_DP)
-        }
-        val end23 = if (targetCollapsed) {
-            dpToPx(COLLAPSED_OFFSET_23_DP)
-        } else {
-            dpToPx(BASE_OFFSET_23_DP)
-        }
-
-        val interpolator = CubicBezierInterpolator(
-            CUBIC_BEZIER_X1, CUBIC_BEZIER_Y1,
-            CUBIC_BEZIER_X2, CUBIC_BEZIER_Y2
-        )
-
-        spacingAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = COMPRESS_ANIMATION_DURATION_MS
-            this.interpolator = interpolator
-            addUpdateListener { animator ->
-                val t = animator.animatedValue as Float
-                currentOffset12Px = interpolateInt(start12, end12, t)
-                currentOffset23Px = interpolateInt(start23, end23, t)
-                applyStackTransforms(shouldAnimate = false)
-            }
-            addListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: Animator) {
-                    currentOffset12Px = end12
-                    currentOffset23Px = end23
-                    spacingAnimator = null
-                    applyStackTransforms(shouldAnimate = false)
-                }
-
-                override fun onAnimationCancel(animation: Animator) {
-                    spacingAnimator = null
-                }
-            })
-            start()
-        }
+        animator.animateCompress()
     }
 
     fun animateFocusChange() {
-        if (!isLaidOut) {
-            post { animateFocusChange() }
-            return
-        }
-
-        if (visibleCardCount < MIN_CARDS_FOR_BACK || isAnimation3Running) return
-
-        val context = buildFocusContextOrNull() ?: return
-
-        runFocusAnimation(context)
-    }
-
-    private fun runFocusAnimation(context: FocusContext) {
-        isAnimation3Running = true
-        resetRunningAnimations()
-        prepareGhostForIncomingBack()
-        context.ghost.visibility = VISIBLE
-
-        val metrics = buildFocusMetrics(context)
-
-        animateMiddleAndBack(context, metrics)
-        animateFrontAndGhost(context, metrics)
-    }
-
-    private fun resetRunningAnimations() {
-        spacingAnimator?.cancel()
-        spacingAnimator = null
-        for (binding in bindings) {
-            binding.root.animate().cancel()
-        }
-    }
-
-    private data class FocusMetrics(
-        val frontY: Float,
-        val middleY: Float,
-        val backY: Float,
-        val frontScale: Float,
-        val middleScale: Float,
-        val backScale: Float,
-        val dropBy: Float,
-        val duration: Long,
-        val interpolator: AccelerateDecelerateInterpolator,
-    )
-
-    private fun buildFocusMetrics(context: FocusContext): FocusMetrics {
-        val frontY = context.front.translationY
-        val middleY = context.middle.translationY
-        val backY = context.back.translationY
-        val frontScale = context.front.scaleX
-        val middleScale = context.middle.scaleX
-        val backScale = context.back.scaleX
-
-        val ghostStartOffset = height.toFloat() + dpToPxF(CARD_DROP_EXTRA_DP)
-        context.ghost.translationY = backY + ghostStartOffset
-        context.ghost.scaleX = SCALE_GHOST
-        context.ghost.scaleY = SCALE_GHOST
-        context.ghost.alpha = ALPHA_BACK
-
-        val dropBy = height.toFloat() + dpToPxF(CARD_DROP_EXTRA_DP)
-        val duration = ANIMATION_3_DURATION_MS
-        val interpolator = AccelerateDecelerateInterpolator()
-
-        return FocusMetrics(
-            frontY = frontY,
-            middleY = middleY,
-            backY = backY,
-            frontScale = frontScale,
-            middleScale = middleScale,
-            backScale = backScale,
-            dropBy = dropBy,
-            duration = duration,
-            interpolator = interpolator,
-        )
-    }
-
-    private fun animateMiddleAndBack(
-        context: FocusContext,
-        metrics: FocusMetrics,
-    ) {
-        if (visibleCardCount >= MIN_CARDS_FOR_MIDDLE) {
-            context.middle.animate()
-                .translationY(metrics.frontY)
-                .scaleX(metrics.frontScale)
-                .scaleY(metrics.frontScale)
-                .alpha(ALPHA_FRONT)
-                .setDuration(metrics.duration)
-                .setInterpolator(metrics.interpolator)
-                .start()
-        }
-
-        if (visibleCardCount >= MIN_CARDS_FOR_BACK) {
-            context.back.animate()
-                .translationY(metrics.middleY)
-                .scaleX(metrics.middleScale)
-                .scaleY(metrics.middleScale)
-                .alpha(ALPHA_MIDDLE)
-                .setDuration(metrics.duration)
-                .setInterpolator(metrics.interpolator)
-                .start()
-
-            context.ghost.animate()
-                .translationY(metrics.backY)
-                .scaleX(metrics.backScale)
-                .scaleY(metrics.backScale)
-                .setDuration(metrics.duration)
-                .setInterpolator(metrics.interpolator)
-                .start()
-        }
-    }
-
-    private fun animateFrontAndGhost(
-        context: FocusContext,
-        metrics: FocusMetrics,
-    ) {
-        context.front.animate()
-            .translationY(metrics.frontY + metrics.dropBy)
-            .setDuration(metrics.duration)
-            .setInterpolator(metrics.interpolator)
-            .withEndAction {
-                isAnimation3Running = false
-                rotateRolesAfterScroll()
-            }
-            .start()
-    }
-
-    private data class FocusContext(
-        val ghost: View,
-        val back: View,
-        val middle: View,
-        val front: View,
-    )
-
-    private fun buildFocusContextOrNull(): FocusContext? {
-        val ghostBinding = bindings.getOrNull(INDEX_GHOST)
-        val backBinding = bindings.getOrNull(INDEX_BACK)
-        val middleBinding = bindings.getOrNull(INDEX_MIDDLE)
-        val frontBinding = bindings.getOrNull(INDEX_FRONT)
-
-        if (ghostBinding == null || backBinding == null || middleBinding == null || frontBinding == null) {
-            return null
-        }
-
-        val ghost = ghostBinding.root
-        val back = backBinding.root
-        val middle = middleBinding.root
-        val front = frontBinding.root
-
-        val isFrontVisible = front.isVisible
-        val isMiddleVisibleEnough =
-            visibleCardCount < MIN_CARDS_FOR_MIDDLE || middle.isVisible
-        val isBackVisibleEnough =
-            visibleCardCount < MIN_CARDS_FOR_BACK || back.isVisible
-
-        val isValid = isFrontVisible && isMiddleVisibleEnough && isBackVisibleEnough
-        if (!isValid) return null
-
-        return FocusContext(
-            ghost = ghost,
-            back = back,
-            middle = middle,
-            front = front,
-        )
+        animator.animateFocusChange()
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -414,7 +192,7 @@ class CardStackLayout @JvmOverloads constructor(
 
             // Ghost card must not affect the measured height of the visible stack.
             if (i != INDEX_GHOST) {
-                val offset = topOffsetForIndex(i)
+                val offset = transforms.topOffsetForIndex(i, currentOffset12Px, currentOffset23Px)
                 minOffset = minOf(minOffset, offset)
                 maxOffset = maxOf(maxOffset, offset)
             }
@@ -456,69 +234,12 @@ class CardStackLayout @JvmOverloads constructor(
             child.layout(left, top, right, bottom)
         }
 
-        applyStackTransforms(shouldAnimate = shouldAnimate)
-    }
-
-    private fun applyStackTransforms(shouldAnimate: Boolean) {
-        var minOffset = Int.MAX_VALUE
-        for (i in 0 until childCount) {
-            val child = getChildAt(i)
-            if (child.isGone) continue
-            if (i != INDEX_GHOST) {
-                minOffset = minOf(minOffset, topOffsetForIndex(i))
-            }
-        }
-        if (minOffset == Int.MAX_VALUE) minOffset = 0
-
-        for (i in 0 until childCount) {
-            val child = getChildAt(i)
-            if (child.isGone) continue
-
-            if (i == INDEX_GHOST) {
-                if (isAnimation3Running) {
-                    child.pivotX = child.width / PIVOT_X_CENTER_DIVISOR
-                    child.pivotY = PIVOT_Y_TOP
-                    continue
-                }
-                child.pivotX = child.width / PIVOT_X_CENTER_DIVISOR
-                child.pivotY = PIVOT_Y_TOP
-                child.animate().cancel()
-                child.translationY = 0f
-                child.scaleX = SCALE_GHOST
-                child.scaleY = SCALE_GHOST
-                child.alpha = ALPHA_HIDDEN
-                continue
-            }
-
-            val topOffset = topOffsetForIndex(i) - minOffset
-            val scale = scaleForIndex(i)
-            val alpha = when (i) {
-                INDEX_BACK -> ALPHA_BACK
-                INDEX_MIDDLE -> ALPHA_MIDDLE
-                INDEX_FRONT -> ALPHA_FRONT
-                else -> ALPHA_DEFAULT
-            }
-
-            child.pivotX = child.width / PIVOT_X_CENTER_DIVISOR
-            child.pivotY = PIVOT_Y_TOP
-
-            if (shouldAnimate && child.isLaidOut) {
-                child.animate().cancel()
-                child.animate()
-                    .translationY(topOffset.toFloat())
-                    .scaleX(scale)
-                    .scaleY(scale)
-                    .alpha(alpha)
-                    .setDuration(STACK_TRANSFORM_DURATION_MS)
-                    .setInterpolator(DecelerateInterpolator())
-                    .start()
-            } else {
-                child.translationY = topOffset.toFloat()
-                child.scaleX = scale
-                child.scaleY = scale
-                child.alpha = alpha
-            }
-        }
+        transforms.apply(
+            shouldAnimate = shouldAnimate,
+            isFocusAnimationRunning = animator.isFocusAnimationRunning,
+            currentOffset12Px = currentOffset12Px,
+            currentOffset23Px = currentOffset23Px,
+        )
     }
 
     private fun updateVisibleCardsForCount(count: Int, animateLayout: Boolean) {
@@ -529,10 +250,10 @@ class CardStackLayout @JvmOverloads constructor(
         val showMiddle = clamped >= MIN_CARDS_FOR_MIDDLE
         val showFront = clamped >= MIN_CARDS_FOR_FRONT
 
-        val ghostRoot = bindings.getOrNull(INDEX_GHOST)?.root
-        val backRoot = bindings.getOrNull(INDEX_BACK)?.root
-        val middleRoot = bindings.getOrNull(INDEX_MIDDLE)?.root
-        val frontRoot = bindings.getOrNull(INDEX_FRONT)?.root
+        val ghostRoot = slots.ghostRoot
+        val backRoot = slots.backRoot
+        val middleRoot = slots.middleRoot
+        val frontRoot = slots.frontRoot
 
         ghostRoot?.visibility = if (clamped == MIN_VISIBLE_CARDS) GONE else VISIBLE
         backRoot?.visibility = if (showBack) VISIBLE else GONE
@@ -576,113 +297,25 @@ class CardStackLayout @JvmOverloads constructor(
         )
     }
 
-    private fun interpolateInt(start: Int, end: Int, t: Float): Int {
-        return (start + (end - start) * t).roundToInt()
-    }
-
-    private fun topOffsetForIndex(childIndex: Int): Int {
-        return when (childIndex) {
-            INDEX_GHOST -> 0
-            INDEX_BACK -> 0
-            INDEX_MIDDLE -> currentOffset23Px
-            else -> currentOffset23Px + currentOffset12Px
-        }
-    }
-
-    private fun scaleForIndex(childIndex: Int): Float {
-        return when (childIndex) {
-            INDEX_GHOST -> SCALE_GHOST
-            INDEX_BACK -> SCALE_BACK
-            INDEX_MIDDLE -> SCALE_MIDDLE
-            else -> SCALE_FRONT
-        }
-    }
-
     private fun applyZOrder() {
         val zStep = dpToPxF(Z_ORDER_STEP_DP)
-        bindings.getOrNull(INDEX_GHOST)?.root?.translationZ = INDEX_GHOST * zStep
-        bindings.getOrNull(INDEX_BACK)?.root?.translationZ = INDEX_BACK * zStep
-        bindings.getOrNull(INDEX_MIDDLE)?.root?.translationZ = INDEX_MIDDLE * zStep
-        bindings.getOrNull(INDEX_FRONT)?.root?.translationZ = INDEX_FRONT * zStep
-    }
-
-    private fun configureAsGhost(binding: MainPageFocusAccountCardBinding) {
-        binding.root.isClickable = false
-        binding.root.isFocusable = false
-        binding.root.isFocusableInTouchMode = false
-        binding.root.isEnabled = false
-        binding.root.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO)
-    }
-
-    private fun configureAsCard(binding: MainPageFocusAccountCardBinding) {
-        binding.root.isEnabled = true
-        binding.root.isClickable = false
-        binding.root.isFocusable = false
-        binding.root.isFocusableInTouchMode = false
-        binding.root.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_AUTO)
-    }
-
-    private fun incomingBackUrl(): String? {
-        if (deckUrls.isEmpty()) return null
-        val candidate = deckUrls.getOrNull(DECK_URL_NEXT_CANDIDATE_INDEX)
-        if (!candidate.isNullOrBlank()) return candidate
-        val fallback = deckUrls.getOrNull(DECK_URL_FALLBACK_INDEX)
-        return fallback?.takeIf { it.isNotBlank() }
-    }
-
-    private fun prepareGhostForIncomingBack() {
-        val ghost = bindings.getOrNull(INDEX_GHOST) ?: return
-        val url = incomingBackUrl()
-        if (url.isNullOrBlank()) {
-            ghost.cardImage.load(null)
-            ghost.cardImage.visibility = GONE
-        } else {
-            ghost.cardImage.visibility = VISIBLE
-            ghost.cardImage.load(url)
-        }
-        configureAsGhost(ghost)
-    }
-
-    private fun rotateDeckUrlsLeft() {
-        if (deckUrls.size <= MIN_DECK_SIZE_FOR_ROTATION) return
-        val first = deckUrls.removeAt(DECK_URL_FALLBACK_INDEX)
-        deckUrls.add(first)
+        slots.applyZOrder(zStepPx = zStep)
     }
 
     private fun rotateRolesAfterScroll() {
-        val oldGhost = bindings.getOrNull(INDEX_GHOST)
-        val oldBack = bindings.getOrNull(INDEX_BACK)
-        val oldMiddle = bindings.getOrNull(INDEX_MIDDLE)
-        val oldFront = bindings.getOrNull(INDEX_FRONT)
-
-        if (oldGhost == null || oldBack == null || oldMiddle == null || oldFront == null) {
-            return
-        }
-
-        bindings.clear()
-        bindings.add(oldFront)
-        bindings.add(oldGhost)
-        bindings.add(oldBack)
-        bindings.add(oldMiddle)
-
-        removeAllViews()
-        addView(oldFront.root)
-        addView(oldGhost.root)
-        addView(oldBack.root)
-        addView(oldMiddle.root)
-
+        slots.rotateAfterScroll()
         applyZOrder()
 
-        rotateDeckUrlsLeft()
-
-        bindings.getOrNull(INDEX_GHOST)?.let(::configureAsGhost)
-        bindings.getOrNull(INDEX_BACK)?.let(::configureAsCard)
-        bindings.getOrNull(INDEX_MIDDLE)?.let(::configureAsCard)
-        bindings.getOrNull(INDEX_FRONT)?.let(::configureAsCard)
-
+        deck.rotateLeft()
+        slots.configureInitialRoles()
         updateVisibleCardsForCount(visibleCardCount, animateLayout = false)
-        prepareGhostForIncomingBack()
-        applyStackTransforms(shouldAnimate = false)
+        deck.prepareGhostForIncomingBack(slots)
+        transforms.apply(
+            shouldAnimate = false,
+            isFocusAnimationRunning = animator.isFocusAnimationRunning,
+            currentOffset12Px = currentOffset12Px,
+            currentOffset23Px = currentOffset23Px,
+        )
         requestLayout()
         invalidate()
     }
