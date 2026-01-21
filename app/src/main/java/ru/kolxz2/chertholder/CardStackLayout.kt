@@ -27,40 +27,75 @@ class CardStackLayout @JvmOverloads constructor(
         private const val INDEX_BACK = 1
         private const val INDEX_MIDDLE = 2
         private const val INDEX_FRONT = 3
+
+        private const val TOTAL_CARD_COUNT = 4
+        private const val MAX_VISIBLE_CARDS = 3
+        private const val MIN_VISIBLE_CARDS = 0
+        private const val MIN_CARDS_FOR_FRONT = 1
+        private const val MIN_CARDS_FOR_MIDDLE = 2
+        private const val MIN_CARDS_FOR_BACK = 3
+        private const val MIN_DECK_SIZE_FOR_ROTATION = 1
+
+        private const val BASE_OFFSET_12_DP = 10f
+        private const val BASE_OFFSET_23_DP = 7f
+        private const val COLLAPSED_OFFSET_12_DP = 4f
+        private const val COLLAPSED_OFFSET_23_DP = 3f
+
+        private const val SCALE_GHOST = 0.5f
+        private const val SCALE_BACK = 0.64f
+        private const val SCALE_MIDDLE = 0.8f
+        private const val SCALE_FRONT = 1.0f
+
+        private const val ALPHA_BACK = 0.7f
+        private const val ALPHA_MIDDLE = 0.85f
+        private const val ALPHA_FRONT = 1.0f
+        private const val ALPHA_DEFAULT = 1.0f
+        private const val ALPHA_HIDDEN = 0f
+
+        private const val ANIMATION_3_DURATION_MS = 500L
+        private const val CARD_CHANGE_DROP_DURATION_MS = 500L
+        private const val CARD_CHANGE_RISE_DURATION_MS = 500L
+        private const val COMPRESS_ANIMATION_DURATION_MS = 500L
+        private const val STACK_TRANSFORM_DURATION_MS = 500L
+
+        private const val CARD_DROP_EXTRA_DP = 24f
+
+        private const val OVERSHOOT_TENSION = 0.9f
+        private const val CUBIC_BEZIER_X1 = 0.34f
+        private const val CUBIC_BEZIER_Y1 = 1.56f
+        private const val CUBIC_BEZIER_X2 = 0.64f
+        private const val CUBIC_BEZIER_Y2 = 1f
+
+        private const val Z_ORDER_STEP_DP = 1f
+
+        private const val DECK_URL_NEXT_CANDIDATE_INDEX = 3
+        private const val DECK_URL_FALLBACK_INDEX = 0
+
+        private const val PIVOT_Y_TOP = 0f
+        private const val PIVOT_X_CENTER_DIVISOR = 2f
     }
 
-    private val baseOffset12Px = dpToPx(10f)
-    private val baseOffset23Px = dpToPx(7f)
-    private val collapsedOffset12Px = dpToPx(4f)
-    private val collapsedOffset23Px = dpToPx(3f)
+    private val baseOffset12Px = dpToPx(BASE_OFFSET_12_DP)
+    private val baseOffset23Px = dpToPx(BASE_OFFSET_23_DP)
+    private val collapsedOffset12Px = dpToPx(COLLAPSED_OFFSET_12_DP)
+    private val collapsedOffset23Px = dpToPx(COLLAPSED_OFFSET_23_DP)
 
     private var currentOffset12Px: Int = baseOffset12Px
     private var currentOffset23Px: Int = baseOffset23Px
-
-    private val scaleGhost = 0.5f
-    private val scaleBack = 0.64f
-    private val scaleMiddle = 0.8f
-    private val scaleFront = 1.0f
-
-    private val alphaBack = 0.7f
-    private val alphaMiddle = 0.85f
-    private val alphaFront = 1.0f
-
-    private val animation3DurationMs = 2040L
 
     private var animateNextLayout: Boolean = false
     private var isCollapsed: Boolean = false
     private var spacingAnimator: ValueAnimator? = null
     private var isAnimation3Running: Boolean = false
 
-    private val bindings: MutableList<ItemCardBinding> = buildList(4) {
+    private val bindings: MutableList<ItemCardBinding> = buildList(TOTAL_CARD_COUNT) {
         val inflater = LayoutInflater.from(context)
-        repeat(4) {
+        repeat(TOTAL_CARD_COUNT) {
             add(ItemCardBinding.inflate(inflater, this@CardStackLayout, true))
         }
     }.toMutableList()
 
-    private var visibleCardCount: Int = 3
+    private var visibleCardCount: Int = MAX_VISIBLE_CARDS
     private val deckUrls: MutableList<String> = mutableListOf()
 
     init {
@@ -72,16 +107,16 @@ class CardStackLayout @JvmOverloads constructor(
         bindings.getOrNull(INDEX_FRONT)?.let(::configureAsCard)
 
         // Initially ничего не показываем до прихода данных.
-        updateVisibleCardsForCount(0, animateLayout = false)
+        updateVisibleCardsForCount(MIN_VISIBLE_CARDS, animateLayout = false)
     }
 
     fun setImageUrls(urls: List<String>, animateLayout: Boolean = true) {
         deckUrls.clear()
         deckUrls.addAll(urls)
 
-        val limited = urls.take(3)
+        val limited = urls.take(MAX_VISIBLE_CARDS)
 
-        visibleCardCount = limited.size.coerceIn(0, 3)
+        visibleCardCount = limited.size.coerceIn(MIN_VISIBLE_CARDS, MAX_VISIBLE_CARDS)
         updateVisibleCardsForCount(visibleCardCount, animateLayout = animateLayout)
 
         for (binding in bindings) {
@@ -117,13 +152,13 @@ class CardStackLayout @JvmOverloads constructor(
         }
 
         val baseY = translationY
-        val extraDrop = dpToPxF(24f)
+        val extraDrop = dpToPxF(CARD_DROP_EXTRA_DP)
         val dropTo = baseY + height.toFloat() + extraDrop
 
         animate().cancel()
         animate()
             .translationY(dropTo)
-            .setDuration(220L)
+            .setDuration(CARD_CHANGE_DROP_DURATION_MS)
             .setInterpolator(AccelerateDecelerateInterpolator())
             .withEndAction {
                 setImageUrls(newUrls, animateLayout = false)
@@ -132,8 +167,8 @@ class CardStackLayout @JvmOverloads constructor(
                     animate().cancel()
                     animate()
                         .translationY(baseY)
-                        .setDuration(280L)
-                        .setInterpolator(OvershootInterpolator(0.9f))
+                        .setDuration(CARD_CHANGE_RISE_DURATION_MS)
+                        .setInterpolator(OvershootInterpolator(OVERSHOOT_TENSION))
                         .start()
                 }
             }
@@ -162,12 +197,12 @@ class CardStackLayout @JvmOverloads constructor(
         val end23 = if (targetCollapsed) collapsedOffset23Px else baseOffset23Px
 
         val interpolator = CubicBezierInterpolator(
-            0.34f, 1.56f,
-            0.64f, 1f
+            CUBIC_BEZIER_X1, CUBIC_BEZIER_Y1,
+            CUBIC_BEZIER_X2, CUBIC_BEZIER_Y2
         )
 
         spacingAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 260L
+            duration = COMPRESS_ANIMATION_DURATION_MS
             this.interpolator = interpolator
             addUpdateListener { animator ->
                 val t = animator.animatedValue as Float
@@ -197,7 +232,7 @@ class CardStackLayout @JvmOverloads constructor(
             return
         }
 
-        if (visibleCardCount < 3) return
+        if (visibleCardCount < MIN_CARDS_FOR_BACK) return
         if (isAnimation3Running) return
         isAnimation3Running = true
 
@@ -218,8 +253,8 @@ class CardStackLayout @JvmOverloads constructor(
         val front = frontBinding.root
 
         if (front.visibility != VISIBLE) return
-        if (visibleCardCount >= 2 && middle.visibility != VISIBLE) return
-        if (visibleCardCount >= 3 && back.visibility != VISIBLE) return
+        if (visibleCardCount >= MIN_CARDS_FOR_MIDDLE && middle.visibility != VISIBLE) return
+        if (visibleCardCount >= MIN_CARDS_FOR_BACK && back.visibility != VISIBLE) return
 
         // Ensure ghost has correct incoming content.
         prepareGhostForIncomingBack()
@@ -232,33 +267,33 @@ class CardStackLayout @JvmOverloads constructor(
         val middleScale = middle.scaleX
         val backScale = back.scaleX
 
-        val ghostStartOffset = height.toFloat() + dpToPxF(24f)
+        val ghostStartOffset = height.toFloat() + dpToPxF(CARD_DROP_EXTRA_DP)
         ghost.translationY = backY + ghostStartOffset
-        ghost.scaleX = scaleGhost
-        ghost.scaleY = scaleGhost
-        ghost.alpha = alphaBack
+        ghost.scaleX = SCALE_GHOST
+        ghost.scaleY = SCALE_GHOST
+        ghost.alpha = ALPHA_BACK
 
-        val dropBy = height.toFloat() + dpToPxF(24f)
-        val duration = animation3DurationMs
+        val dropBy = height.toFloat() + dpToPxF(CARD_DROP_EXTRA_DP)
+        val duration = ANIMATION_3_DURATION_MS
         val interpolator = AccelerateDecelerateInterpolator()
 
-        if (visibleCardCount >= 2) {
+        if (visibleCardCount >= MIN_CARDS_FOR_MIDDLE) {
             middle.animate()
                 .translationY(frontY)
                 .scaleX(frontScale)
                 .scaleY(frontScale)
-                .alpha(alphaFront)
+                .alpha(ALPHA_FRONT)
                 .setDuration(duration)
                 .setInterpolator(interpolator)
                 .start()
         }
 
-        if (visibleCardCount >= 3) {
+        if (visibleCardCount >= MIN_CARDS_FOR_BACK) {
             back.animate()
                 .translationY(middleY)
                 .scaleX(middleScale)
                 .scaleY(middleScale)
-                .alpha(alphaMiddle)
+                .alpha(ALPHA_MIDDLE)
                 .setDuration(duration)
                 .setInterpolator(interpolator)
                 .start()
@@ -363,31 +398,31 @@ class CardStackLayout @JvmOverloads constructor(
 
             if (i == INDEX_GHOST) {
                 if (isAnimation3Running) {
-                    child.pivotX = child.width / 2f
-                    child.pivotY = 0f
+                    child.pivotX = child.width / PIVOT_X_CENTER_DIVISOR
+                    child.pivotY = PIVOT_Y_TOP
                     continue
                 }
-                child.pivotX = child.width / 2f
-                child.pivotY = 0f
+                child.pivotX = child.width / PIVOT_X_CENTER_DIVISOR
+                child.pivotY = PIVOT_Y_TOP
                 child.animate().cancel()
                 child.translationY = 0f
-                child.scaleX = scaleGhost
-                child.scaleY = scaleGhost
-                child.alpha = 0f
+                child.scaleX = SCALE_GHOST
+                child.scaleY = SCALE_GHOST
+                child.alpha = ALPHA_HIDDEN
                 continue
             }
 
             val topOffset = topOffsetForIndex(i) - minOffset
             val scale = scaleForIndex(i)
             val alpha = when (i) {
-                INDEX_BACK -> alphaBack
-                INDEX_MIDDLE -> alphaMiddle
-                INDEX_FRONT -> alphaFront
-                else -> 1f
+                INDEX_BACK -> ALPHA_BACK
+                INDEX_MIDDLE -> ALPHA_MIDDLE
+                INDEX_FRONT -> ALPHA_FRONT
+                else -> ALPHA_DEFAULT
             }
 
-            child.pivotX = child.width / 2f
-            child.pivotY = 0f
+            child.pivotX = child.width / PIVOT_X_CENTER_DIVISOR
+            child.pivotY = PIVOT_Y_TOP
 
             if (shouldAnimate && child.isLaidOut) {
                 child.animate().cancel()
@@ -396,7 +431,7 @@ class CardStackLayout @JvmOverloads constructor(
                     .scaleX(scale)
                     .scaleY(scale)
                     .alpha(alpha)
-                    .setDuration(180L)
+                    .setDuration(STACK_TRANSFORM_DURATION_MS)
                     .setInterpolator(DecelerateInterpolator())
                     .start()
             } else {
@@ -409,19 +444,19 @@ class CardStackLayout @JvmOverloads constructor(
     }
 
     private fun updateVisibleCardsForCount(count: Int, animateLayout: Boolean) {
-        val clamped = count.coerceIn(0, 3)
+        val clamped = count.coerceIn(MIN_VISIBLE_CARDS, MAX_VISIBLE_CARDS)
         visibleCardCount = clamped
 
-        val showBack = clamped >= 3
-        val showMiddle = clamped >= 2
-        val showFront = clamped >= 1
+        val showBack = clamped >= MIN_CARDS_FOR_BACK
+        val showMiddle = clamped >= MIN_CARDS_FOR_MIDDLE
+        val showFront = clamped >= MIN_CARDS_FOR_FRONT
 
         val ghostRoot = bindings.getOrNull(INDEX_GHOST)?.root
         val backRoot = bindings.getOrNull(INDEX_BACK)?.root
         val middleRoot = bindings.getOrNull(INDEX_MIDDLE)?.root
         val frontRoot = bindings.getOrNull(INDEX_FRONT)?.root
 
-        ghostRoot?.visibility = if (clamped == 0) GONE else VISIBLE
+        ghostRoot?.visibility = if (clamped == MIN_VISIBLE_CARDS) GONE else VISIBLE
         backRoot?.visibility = if (showBack) VISIBLE else GONE
         middleRoot?.visibility = if (showMiddle) VISIBLE else GONE
         frontRoot?.visibility = if (showFront) VISIBLE else GONE
@@ -478,15 +513,15 @@ class CardStackLayout @JvmOverloads constructor(
 
     private fun scaleForIndex(childIndex: Int): Float {
         return when (childIndex) {
-            INDEX_GHOST -> scaleGhost
-            INDEX_BACK -> scaleBack
-            INDEX_MIDDLE -> scaleMiddle
-            else -> scaleFront
+            INDEX_GHOST -> SCALE_GHOST
+            INDEX_BACK -> SCALE_BACK
+            INDEX_MIDDLE -> SCALE_MIDDLE
+            else -> SCALE_FRONT
         }
     }
 
     private fun applyZOrder() {
-        val zStep = dpToPxF(1f)
+        val zStep = dpToPxF(Z_ORDER_STEP_DP)
         bindings.getOrNull(INDEX_GHOST)?.root?.translationZ = 0f
         bindings.getOrNull(INDEX_BACK)?.root?.translationZ = zStep
         bindings.getOrNull(INDEX_MIDDLE)?.root?.translationZ = 2f * zStep
@@ -511,9 +546,9 @@ class CardStackLayout @JvmOverloads constructor(
 
     private fun incomingBackUrl(): String? {
         if (deckUrls.isEmpty()) return null
-        val candidate = deckUrls.getOrNull(3)
+        val candidate = deckUrls.getOrNull(DECK_URL_NEXT_CANDIDATE_INDEX)
         if (!candidate.isNullOrBlank()) return candidate
-        val fallback = deckUrls.getOrNull(0)
+        val fallback = deckUrls.getOrNull(DECK_URL_FALLBACK_INDEX)
         return fallback?.takeIf { it.isNotBlank() }
     }
 
@@ -531,8 +566,8 @@ class CardStackLayout @JvmOverloads constructor(
     }
 
     private fun rotateDeckUrlsLeft() {
-        if (deckUrls.size <= 1) return
-        val first = deckUrls.removeAt(0)
+        if (deckUrls.size <= MIN_DECK_SIZE_FOR_ROTATION) return
+        val first = deckUrls.removeAt(DECK_URL_FALLBACK_INDEX)
         deckUrls.add(first)
     }
 
