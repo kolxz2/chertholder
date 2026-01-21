@@ -8,12 +8,12 @@ class RecyclerAdapter(
 ) : RecyclerView.Adapter<RecyclerAdapter.RecyclerViewHolder>() {
 
     class RecyclerViewHolder(
-        val stack: CardStackLayout
+        val stack: CardholderLayout
     ) : RecyclerView.ViewHolder(stack)
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerViewHolder {
         // One RecyclerView item: the custom ViewGroup itself.
-        val view = CardStackLayout(parent.context).apply {
+        val view = CardholderLayout(parent.context).apply {
             layoutParams = RecyclerView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT

@@ -7,7 +7,7 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <ru.kolxz2.chertholder.CardStackLayout
+    <ru.kolxz2.chertholder.CardholderLayout
         android:id="@+id/cardStackLayout"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
