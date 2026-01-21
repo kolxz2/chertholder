@@ -14,8 +14,9 @@ import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import androidx.core.view.isGone
 import coil.load
-import ru.kolxz2.chertholder.databinding.ItemCardBinding
+import ru.kolxz2.chertholder.databinding.MainPageFocusAccountCardBinding
 import kotlin.math.roundToInt
+import androidx.core.view.isVisible
 
 class CardStackLayout @JvmOverloads constructor(
     context: Context,
@@ -84,10 +85,10 @@ class CardStackLayout @JvmOverloads constructor(
     private var spacingAnimator: ValueAnimator? = null
     private var isAnimation3Running: Boolean = false
 
-    private val bindings: MutableList<ItemCardBinding> = buildList(TOTAL_CARD_COUNT) {
+    private val bindings: MutableList<MainPageFocusAccountCardBinding> = buildList(TOTAL_CARD_COUNT) {
         val inflater = LayoutInflater.from(context)
         repeat(TOTAL_CARD_COUNT) {
-            add(ItemCardBinding.inflate(inflater, this@CardStackLayout, true))
+            add(MainPageFocusAccountCardBinding.inflate(inflater, this@CardStackLayout, true))
         }
     }.toMutableList()
 
@@ -116,8 +117,8 @@ class CardStackLayout @JvmOverloads constructor(
         updateVisibleCardsForCount(visibleCardCount, animateLayout = animateLayout)
 
         for (binding in bindings) {
-            binding.imageView.load(null)
-            binding.imageView.visibility = GONE
+            binding.cardImage.load(null)
+            binding.cardImage.visibility = GONE
         }
 
         val targetBindingIndices = intArrayOf(INDEX_FRONT, INDEX_MIDDLE, INDEX_BACK)
@@ -127,10 +128,10 @@ class CardStackLayout @JvmOverloads constructor(
             val url = limited[i]
 
             if (url.isBlank()) {
-                binding.imageView.visibility = GONE
+                binding.cardImage.visibility = GONE
             } else {
-                binding.imageView.visibility = VISIBLE
-                binding.imageView.load(url)
+                binding.cardImage.visibility = VISIBLE
+                binding.cardImage.load(url)
             }
         }
 
@@ -210,8 +211,8 @@ class CardStackLayout @JvmOverloads constructor(
             this.interpolator = interpolator
             addUpdateListener { animator ->
                 val t = animator.animatedValue as Float
-                currentOffset12Px = lerpInt(start12, end12, t)
-                currentOffset23Px = lerpInt(start23, end23, t)
+                currentOffset12Px = interpolateInt(start12, end12, t)
+                currentOffset23Px = interpolateInt(start23, end23, t)
                 applyStackTransforms(shouldAnimate = false)
             }
             addListener(object : AnimatorListenerAdapter() {
@@ -236,12 +237,14 @@ class CardStackLayout @JvmOverloads constructor(
             return
         }
 
-        if (visibleCardCount < MIN_CARDS_FOR_BACK || isAnimation3Running) {
-            return
-        }
+        if (visibleCardCount < MIN_CARDS_FOR_BACK || isAnimation3Running) return
 
         val context = buildFocusContextOrNull() ?: return
 
+        runFocusAnimation(context)
+    }
+
+    private fun runFocusAnimation(context: FocusContext) {
         isAnimation3Running = true
 
         spacingAnimator?.cancel()
@@ -320,19 +323,28 @@ class CardStackLayout @JvmOverloads constructor(
     )
 
     private fun buildFocusContextOrNull(): FocusContext? {
-        val ghostBinding = bindings.getOrNull(INDEX_GHOST) ?: return null
-        val backBinding = bindings.getOrNull(INDEX_BACK) ?: return null
-        val middleBinding = bindings.getOrNull(INDEX_MIDDLE) ?: return null
-        val frontBinding = bindings.getOrNull(INDEX_FRONT) ?: return null
+        val ghostBinding = bindings.getOrNull(INDEX_GHOST)
+        val backBinding = bindings.getOrNull(INDEX_BACK)
+        val middleBinding = bindings.getOrNull(INDEX_MIDDLE)
+        val frontBinding = bindings.getOrNull(INDEX_FRONT)
+
+        if (ghostBinding == null || backBinding == null || middleBinding == null || frontBinding == null) {
+            return null
+        }
 
         val ghost = ghostBinding.root
         val back = backBinding.root
         val middle = middleBinding.root
         val front = frontBinding.root
 
-        if (front.visibility != VISIBLE) return null
-        if (visibleCardCount >= MIN_CARDS_FOR_MIDDLE && middle.visibility != VISIBLE) return null
-        if (visibleCardCount >= MIN_CARDS_FOR_BACK && back.visibility != VISIBLE) return null
+        val isFrontVisible = front.isVisible
+        val isMiddleVisibleEnough =
+            visibleCardCount < MIN_CARDS_FOR_MIDDLE || middle.isVisible
+        val isBackVisibleEnough =
+            visibleCardCount < MIN_CARDS_FOR_BACK || back.isVisible
+
+        val isValid = isFrontVisible && isMiddleVisibleEnough && isBackVisibleEnough
+        if (!isValid) return null
 
         return FocusContext(
             ghost = ghost,
@@ -522,7 +534,7 @@ class CardStackLayout @JvmOverloads constructor(
         )
     }
 
-    private fun lerpInt(start: Int, end: Int, t: Float): Int {
+    private fun interpolateInt(start: Int, end: Int, t: Float): Int {
         return (start + (end - start) * t).roundToInt()
     }
 
@@ -552,7 +564,7 @@ class CardStackLayout @JvmOverloads constructor(
         bindings.getOrNull(INDEX_FRONT)?.root?.translationZ = INDEX_FRONT * zStep
     }
 
-    private fun configureAsGhost(binding: ItemCardBinding) {
+    private fun configureAsGhost(binding: MainPageFocusAccountCardBinding) {
         binding.root.isClickable = false
         binding.root.isFocusable = false
         binding.root.isFocusableInTouchMode = false
@@ -560,7 +572,7 @@ class CardStackLayout @JvmOverloads constructor(
         binding.root.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO)
     }
 
-    private fun configureAsCard(binding: ItemCardBinding) {
+    private fun configureAsCard(binding: MainPageFocusAccountCardBinding) {
         binding.root.isEnabled = true
         binding.root.isClickable = false
         binding.root.isFocusable = false
@@ -580,11 +592,11 @@ class CardStackLayout @JvmOverloads constructor(
         val ghost = bindings.getOrNull(INDEX_GHOST) ?: return
         val url = incomingBackUrl()
         if (url.isNullOrBlank()) {
-            ghost.imageView.load(null)
-            ghost.imageView.visibility = GONE
+            ghost.cardImage.load(null)
+            ghost.cardImage.visibility = GONE
         } else {
-            ghost.imageView.visibility = VISIBLE
-            ghost.imageView.load(url)
+            ghost.cardImage.visibility = VISIBLE
+            ghost.cardImage.load(url)
         }
         configureAsGhost(ghost)
     }
