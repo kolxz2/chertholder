@@ -60,10 +60,5 @@ class MainActivity : AppCompatActivity() {
             val stack = (binding.recyclerView.findViewHolderForAdapterPosition(0) as? RecyclerAdapter.RecyclerViewHolder)?.stack
             stack?.startAnimation2()
         }
-
-        binding.btnAnim3.setOnClickListener {
-            val stack = (binding.recyclerView.findViewHolderForAdapterPosition(0) as? RecyclerAdapter.RecyclerViewHolder)?.stack
-            stack?.startAnimation3()
-        }
     }
 }

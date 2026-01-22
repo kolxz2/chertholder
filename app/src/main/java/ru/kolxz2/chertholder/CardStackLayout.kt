@@ -7,8 +7,8 @@ import android.content.Context
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.LayoutInflater
-import android.view.ViewGroup
 import android.view.animation.AccelerateDecelerateInterpolator
+import android.widget.FrameLayout
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import androidx.core.view.isGone
@@ -20,7 +20,7 @@ class CardStackLayout @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
-) : ViewGroup(context, attrs, defStyleAttr) {
+) : FrameLayout(context, attrs, defStyleAttr) {
 
     private companion object {
         private const val INDEX_GHOST = 0
@@ -114,8 +114,15 @@ class CardStackLayout @JvmOverloads constructor(
         bindings.getOrNull(INDEX_MIDDLE)?.root?.visibility = if (showMiddle) VISIBLE else GONE
         bindings.getOrNull(INDEX_FRONT)?.root?.visibility = if (showFront) VISIBLE else GONE
 
+        val shouldAnimate = animateLayout
         animateNextLayout = animateLayout
         requestLayout()
+        post {
+            if (isLaidOut) {
+                applyStackTransforms(shouldAnimate = shouldAnimate)
+                animateNextLayout = false
+            }
+        }
         invalidate()
     }
 
@@ -204,41 +211,9 @@ class CardStackLayout @JvmOverloads constructor(
         }
     }
 
-    fun startAnimation3() {
-        if (!isLaidOut) {
-            post { startAnimation3() }
-            return
-        }
-
-        val front = bindings.getOrNull(INDEX_FRONT)?.root ?: return
-        if (front.visibility != VISIBLE) return
-
-        front.animate().cancel()
-
-        val baseTranslationX = front.translationX
-        val baseRotation = front.rotation
-
-        val swipeDistance = (width.takeIf { it > 0 } ?: front.width).toFloat() * 0.25f
-        val targetTranslationX = baseTranslationX + swipeDistance
-
-        front.animate()
-            .translationX(targetTranslationX)
-            .rotation(baseRotation + 8f)
-            .setDuration(180L)
-            .setInterpolator(AccelerateDecelerateInterpolator())
-            .withEndAction {
-                front.animate()
-                    .translationX(baseTranslationX)
-                    .rotation(baseRotation)
-                    .setDuration(240L)
-                    .setInterpolator(OvershootInterpolator(1.8f))
-                    .start()
-            }
-            .start()
-    }
-
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        var maxChildWidth = 0
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+
         var maxChildHeight = 0
         var minOffset = Int.MAX_VALUE
         var maxOffset = Int.MIN_VALUE
@@ -246,11 +221,8 @@ class CardStackLayout @JvmOverloads constructor(
         for (i in 0 until childCount) {
             val child = getChildAt(i)
             if (child.isGone) continue
-            measureChildWithMargins(child, widthMeasureSpec, 0, heightMeasureSpec, 0)
-            val lp = child.layoutParams as MarginLayoutParams
-            val childWidth = child.measuredWidth + lp.leftMargin + lp.rightMargin
+            val lp = child.layoutParams as FrameLayout.LayoutParams
             val childHeight = child.measuredHeight + lp.topMargin + lp.bottomMargin
-            maxChildWidth = maxOf(maxChildWidth, childWidth)
             maxChildHeight = maxOf(maxChildHeight, childHeight)
 
             if (i != INDEX_GHOST) {
@@ -260,7 +232,6 @@ class CardStackLayout @JvmOverloads constructor(
             }
         }
 
-        val desiredWidth = paddingLeft + maxChildWidth + paddingRight
         val stackHeight = if (minOffset == Int.MAX_VALUE) {
             0
         } else {
@@ -269,35 +240,11 @@ class CardStackLayout @JvmOverloads constructor(
         val desiredHeight = paddingTop + stackHeight + maxChildHeight + paddingBottom
 
         setMeasuredDimension(
-            resolveSize(desiredWidth, widthMeasureSpec),
+            measuredWidth,
             resolveSize(desiredHeight, heightMeasureSpec)
         )
     }
 
-    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
-        val shouldAnimate = animateNextLayout
-        animateNextLayout = false
-
-        val availableWidth = (r - l) - paddingLeft - paddingRight
-
-        for (i in 0 until childCount) {
-            val child = getChildAt(i)
-            if (child.isGone) continue
-
-            val lp = child.layoutParams as MarginLayoutParams
-
-            val totalWidth = child.measuredWidth + lp.leftMargin + lp.rightMargin
-            val centeredLeft = paddingLeft + ((availableWidth - totalWidth) / 2)
-            val left = centeredLeft + lp.leftMargin
-            val top = paddingTop + lp.topMargin
-            val right = left + child.measuredWidth
-            val bottom = top + child.measuredHeight
-
-            child.layout(left, top, right, bottom)
-        }
-
-        applyStackTransforms(shouldAnimate = shouldAnimate)
-    }
 
     private fun applyStackTransforms(shouldAnimate: Boolean) {
         var minOffset = Int.MAX_VALUE
@@ -350,20 +297,12 @@ class CardStackLayout @JvmOverloads constructor(
         }
     }
 
-    override fun generateLayoutParams(attrs: AttributeSet?): LayoutParams {
-        return MarginLayoutParams(context, attrs)
+    override fun generateLayoutParams(attrs: AttributeSet?): FrameLayout.LayoutParams {
+        return LayoutParams(context, attrs)
     }
 
-    override fun generateDefaultLayoutParams(): LayoutParams {
-        return MarginLayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
-    }
-
-    override fun generateLayoutParams(p: LayoutParams?): LayoutParams {
-        return MarginLayoutParams(p)
-    }
-
-    override fun checkLayoutParams(p: LayoutParams?): Boolean {
-        return p is MarginLayoutParams
+    override fun generateDefaultLayoutParams(): FrameLayout.LayoutParams {
+        return LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
     }
 
     private fun dpToPx(dp: Float): Int {
