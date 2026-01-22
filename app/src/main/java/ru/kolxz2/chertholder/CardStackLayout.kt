@@ -7,6 +7,7 @@ import android.content.Context
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.LayoutInflater
+import android.view.Gravity
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.FrameLayout
 import android.view.animation.DecelerateInterpolator
@@ -58,6 +59,9 @@ class CardStackLayout @JvmOverloads constructor(
     init {
         for ((index, binding) in bindings.withIndex()) {
             binding.cardImage.visibility = GONE
+            val layoutParams = binding.root.layoutParams as? LayoutParams ?: generateDefaultLayoutParams()
+            layoutParams.gravity = Gravity.CENTER_HORIZONTAL
+            binding.root.layoutParams = layoutParams
         }
 
         val zStep = dpToPxF(1f)
@@ -302,7 +306,9 @@ class CardStackLayout @JvmOverloads constructor(
     }
 
     override fun generateDefaultLayoutParams(): LayoutParams {
-        return LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
+        return LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
     }
 
     private fun dpToPx(dp: Float): Int {
