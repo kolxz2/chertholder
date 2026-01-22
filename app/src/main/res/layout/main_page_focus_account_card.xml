@@ -17,7 +17,7 @@
         app:layout_constraintBottom_toBottomOf="parent">
 
         <ImageView
-            android:id="@+id/imageView"
+            android:id="@+id/cardImage"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:contentDescription="@string/image_description"
@@ -26,4 +26,3 @@
     </com.google.android.material.card.MaterialCardView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
-

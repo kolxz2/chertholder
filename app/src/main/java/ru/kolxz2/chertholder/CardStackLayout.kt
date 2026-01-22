@@ -13,7 +13,7 @@ import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import androidx.core.view.isGone
 import coil.load
-import ru.kolxz2.chertholder.databinding.ItemCardBinding
+import ru.kolxz2.chertholder.databinding.MainPageFocusAccountCardBinding
 import kotlin.math.roundToInt
 
 class CardStackLayout @JvmOverloads constructor(
@@ -29,10 +29,10 @@ class CardStackLayout @JvmOverloads constructor(
         private const val INDEX_FRONT = 3
     }
 
-    private val baseOffset12Px = dpToPx(10f)
+    private val baseOffset12Px = dpToPx(9f)
     private val baseOffset23Px = dpToPx(7f)
-    private val collapsedOffset12Px = dpToPx(4f)
-    private val collapsedOffset23Px = dpToPx(3f)
+    private val collapsedOffset12Px = dpToPx(8f)
+    private val collapsedOffset23Px = dpToPx(5f)
 
     private var currentOffset12Px: Int = baseOffset12Px
     private var currentOffset23Px: Int = baseOffset23Px
@@ -46,10 +46,10 @@ class CardStackLayout @JvmOverloads constructor(
     private var isCollapsed: Boolean = false
     private var spacingAnimator: ValueAnimator? = null
 
-    private val bindings: List<ItemCardBinding> = buildList(4) {
+    private val bindings: List<MainPageFocusAccountCardBinding> = buildList(4) {
         val inflater = LayoutInflater.from(context)
         repeat(4) {
-            add(ItemCardBinding.inflate(inflater, this@CardStackLayout, true))
+            add(MainPageFocusAccountCardBinding.inflate(inflater, this@CardStackLayout, true))
         }
     }
 
@@ -57,7 +57,7 @@ class CardStackLayout @JvmOverloads constructor(
 
     init {
         for ((index, binding) in bindings.withIndex()) {
-            binding.imageView.visibility = GONE
+            binding.cardImage.visibility = GONE
         }
 
         val zStep = dpToPxF(1f)
@@ -73,7 +73,7 @@ class CardStackLayout @JvmOverloads constructor(
             ghost.root.isFocusableInTouchMode = false
             ghost.root.isEnabled = false
             ghost.root.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO)
-            ghost.imageView.visibility = GONE
+            ghost.cardImage.visibility = GONE
         }
 
         setCardCount(visibleCardCount)
@@ -86,8 +86,8 @@ class CardStackLayout @JvmOverloads constructor(
         setCardCount(visible, animateLayout = animateLayout)
 
         for (binding in bindings) {
-            binding.imageView.load(null)
-            binding.imageView.visibility = GONE
+            binding.cardImage.load(null)
+            binding.cardImage.visibility = GONE
         }
 
         val targetBindingIndices = intArrayOf(INDEX_FRONT, INDEX_MIDDLE, INDEX_BACK)
@@ -96,8 +96,8 @@ class CardStackLayout @JvmOverloads constructor(
             val binding = bindings.getOrNull(bindingIndex) ?: continue
             val url = limited[i]
 
-            binding.imageView.visibility = VISIBLE
-            binding.imageView.load(url)
+            binding.cardImage.visibility = VISIBLE
+            binding.cardImage.load(url)
         }
     }
 
@@ -221,7 +221,7 @@ class CardStackLayout @JvmOverloads constructor(
         for (i in 0 until childCount) {
             val child = getChildAt(i)
             if (child.isGone) continue
-            val lp = child.layoutParams as FrameLayout.LayoutParams
+            val lp = child.layoutParams as LayoutParams
             val childHeight = child.measuredHeight + lp.topMargin + lp.bottomMargin
             maxChildHeight = maxOf(maxChildHeight, childHeight)
 
@@ -297,11 +297,11 @@ class CardStackLayout @JvmOverloads constructor(
         }
     }
 
-    override fun generateLayoutParams(attrs: AttributeSet?): FrameLayout.LayoutParams {
+    override fun generateLayoutParams(attrs: AttributeSet?): LayoutParams {
         return LayoutParams(context, attrs)
     }
 
-    override fun generateDefaultLayoutParams(): FrameLayout.LayoutParams {
+    override fun generateDefaultLayoutParams(): LayoutParams {
         return LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
     }
 
