@@ -28,6 +28,36 @@ class CardStackLayout @JvmOverloads constructor(
         private const val INDEX_BACK = 1
         private const val INDEX_MIDDLE = 2
         private const val INDEX_FRONT = 3
+        
+        private const val TOTAL_CARD_COUNT = 4
+        private const val MAX_VISIBLE_CARD_COUNT = 3
+        private const val MIN_VISIBLE_CARD_COUNT = 1
+        
+        private const val Z_STEP_DP = 1f
+        private const val Z_MULTIPLIER_BACK = 1f
+        private const val Z_MULTIPLIER_MIDDLE = 2f
+        private const val Z_MULTIPLIER_FRONT = 3f
+        
+        private const val EXTRA_DROP_DP = 24f
+        
+        private const val ANIMATION_DURATION_DROP_MS = 220L
+        private const val ANIMATION_DURATION_RISE_MS = 280L
+        private const val ANIMATION_DURATION_SPACING_MS = 260L
+        private const val ANIMATION_DURATION_STACK_MS = 180L
+        
+        private const val OVERSHOOT_TENSION = 0.9f
+        
+        private const val CUBIC_BEZIER_X1 = 0.34f
+        private const val CUBIC_BEZIER_Y1 = 1.56f
+        private const val CUBIC_BEZIER_X2 = 0.64f
+        private const val CUBIC_BEZIER_Y2 = 1f
+        
+        private const val PIVOT_DIVISOR = 2f
+        private const val PIVOT_Y_OFFSET = 0f
+        
+        private const val MIN_STACK_HEIGHT = 0
+        private const val CARD_COUNT_THRESHOLD_MIDDLE = 2
+        private const val CARD_COUNT_THRESHOLD_BACK = 3
     }
 
     private val baseOffset12Px = dpToPx(9f)
@@ -47,14 +77,14 @@ class CardStackLayout @JvmOverloads constructor(
     private var isCollapsed: Boolean = false
     private var spacingAnimator: ValueAnimator? = null
 
-    private val bindings: List<MainPageFocusAccountCardBinding> = buildList(4) {
+    private val bindings: List<MainPageFocusAccountCardBinding> = buildList(TOTAL_CARD_COUNT) {
         val inflater = LayoutInflater.from(context)
-        repeat(4) {
+        repeat(TOTAL_CARD_COUNT) {
             add(MainPageFocusAccountCardBinding.inflate(inflater, this@CardStackLayout, true))
         }
     }
 
-    private var visibleCardCount: Int = 3
+    private var visibleCardCount: Int = MAX_VISIBLE_CARD_COUNT
 
     init {
         for ((index, binding) in bindings.withIndex()) {
@@ -64,11 +94,11 @@ class CardStackLayout @JvmOverloads constructor(
             binding.root.layoutParams = layoutParams
         }
 
-        val zStep = dpToPxF(1f)
+        val zStep = dpToPxF(Z_STEP_DP)
         bindings.getOrNull(INDEX_GHOST)?.root?.translationZ = 0f
-        bindings.getOrNull(INDEX_BACK)?.root?.translationZ = zStep
-        bindings.getOrNull(INDEX_MIDDLE)?.root?.translationZ = 2f * zStep
-        bindings.getOrNull(INDEX_FRONT)?.root?.translationZ = 3f * zStep
+        bindings.getOrNull(INDEX_BACK)?.root?.translationZ = Z_MULTIPLIER_BACK * zStep
+        bindings.getOrNull(INDEX_MIDDLE)?.root?.translationZ = Z_MULTIPLIER_MIDDLE * zStep
+        bindings.getOrNull(INDEX_FRONT)?.root?.translationZ = Z_MULTIPLIER_FRONT * zStep
 
         bindings.getOrNull(INDEX_GHOST)?.let { ghost ->
             ghost.root.alpha = 0f
@@ -106,11 +136,11 @@ class CardStackLayout @JvmOverloads constructor(
     }
 
     fun setCardCount(count: Int, animateLayout: Boolean = true) {
-        val clamped = count.coerceIn(1, 3)
+        val clamped = count.coerceIn(MIN_VISIBLE_CARD_COUNT, MAX_VISIBLE_CARD_COUNT)
         visibleCardCount = clamped
 
-        val showBack = visibleCardCount >= 3
-        val showMiddle = visibleCardCount >= 2
+        val showBack = visibleCardCount >= CARD_COUNT_THRESHOLD_BACK
+        val showMiddle = visibleCardCount >= CARD_COUNT_THRESHOLD_MIDDLE
         val showFront = true
 
         bindings.getOrNull(INDEX_GHOST)?.root?.visibility = VISIBLE
@@ -141,13 +171,13 @@ class CardStackLayout @JvmOverloads constructor(
         }
 
         val baseY = translationY
-        val extraDrop = dpToPxF(24f)
+        val extraDrop = dpToPxF(EXTRA_DROP_DP)
         val dropTo = baseY + height.toFloat() + extraDrop
 
         animate().cancel()
         animate()
             .translationY(dropTo)
-            .setDuration(220L)
+            .setDuration(ANIMATION_DURATION_DROP_MS)
             .setInterpolator(AccelerateDecelerateInterpolator())
             .withEndAction {
                 setImageUrls(newUrls, animateLayout = false)
@@ -156,8 +186,8 @@ class CardStackLayout @JvmOverloads constructor(
                     animate().cancel()
                     animate()
                         .translationY(baseY)
-                        .setDuration(280L)
-                        .setInterpolator(OvershootInterpolator(0.9f))
+                        .setDuration(ANIMATION_DURATION_RISE_MS)
+                        .setInterpolator(OvershootInterpolator(OVERSHOOT_TENSION))
                         .start()
                 }
             }
@@ -186,12 +216,12 @@ class CardStackLayout @JvmOverloads constructor(
         val end23 = if (targetCollapsed) collapsedOffset23Px else baseOffset23Px
 
         val interpolator = CubicBezierInterpolator(
-            0.34f, 1.56f,
-            0.64f, 1f
+            CUBIC_BEZIER_X1, CUBIC_BEZIER_Y1,
+            CUBIC_BEZIER_X2, CUBIC_BEZIER_Y2
         )
 
         spacingAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 260L
+            duration = ANIMATION_DURATION_SPACING_MS
             this.interpolator = interpolator
             addUpdateListener { animator ->
                 val t = animator.animatedValue as Float
@@ -237,9 +267,9 @@ class CardStackLayout @JvmOverloads constructor(
         }
 
         val stackHeight = if (minOffset == Int.MAX_VALUE) {
-            0
+            MIN_STACK_HEIGHT
         } else {
-            (maxOffset - minOffset).coerceAtLeast(0)
+            (maxOffset - minOffset).coerceAtLeast(MIN_STACK_HEIGHT)
         }
         val desiredHeight = paddingTop + stackHeight + maxChildHeight + paddingBottom
 
@@ -259,7 +289,7 @@ class CardStackLayout @JvmOverloads constructor(
                 minOffset = minOf(minOffset, topOffsetForIndex(i))
             }
         }
-        if (minOffset == Int.MAX_VALUE) minOffset = 0
+        if (minOffset == Int.MAX_VALUE) minOffset = MIN_STACK_HEIGHT
 
         for (i in 0 until childCount) {
             val child = getChildAt(i)
@@ -279,8 +309,8 @@ class CardStackLayout @JvmOverloads constructor(
             val topOffset = topOffsetForIndex(i) - minOffset
             val scale = scaleForIndex(i)
 
-            child.pivotX = child.width / 2f
-            child.pivotY = 0f
+            child.pivotX = child.width / PIVOT_DIVISOR
+            child.pivotY = PIVOT_Y_OFFSET
 
             if (shouldAnimate && child.isLaidOut) {
                 child.animate().cancel()
@@ -289,7 +319,7 @@ class CardStackLayout @JvmOverloads constructor(
                     .scaleX(scale)
                     .scaleY(scale)
                     .alpha(1f)
-                    .setDuration(180L)
+                    .setDuration(ANIMATION_DURATION_STACK_MS)
                     .setInterpolator(DecelerateInterpolator())
                     .start()
             } else {
