@@ -19,6 +19,7 @@ import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.target.Target
 import ru.kolxz2.chertholder.databinding.MainPageFocusAccountCardBinding
+import androidx.core.view.isGone
 
 internal class CardholderLayout @JvmOverloads constructor(
     context: Context,
@@ -89,7 +90,7 @@ internal class CardholderLayout @JvmOverloads constructor(
 
         for (i in 0 until childCount) {
             val child = getChildAt(i)
-            if (child.visibility == View.GONE) continue
+            if (child.isGone) continue
 
             val lp = child.layoutParams as MarginLayoutParams
             val totalWidth = child.measuredWidth + lp.leftMargin + lp.rightMargin
@@ -121,7 +122,11 @@ internal class CardholderLayout @JvmOverloads constructor(
         animator?.cancel()
     }
 
-    fun setCards(cardSources: List<CardSource>, isCollapsed: Boolean, isAnimate: Boolean) {
+    fun setCards(
+        cardSources: List<CardSource> = this.cardSources,
+        isCollapsed: Boolean = this.isCollapsed,
+        isAnimate: Boolean,
+    ) {
         applyChange(
             cards = cardSources,
             collapsed = isCollapsed,
