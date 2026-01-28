@@ -4,16 +4,19 @@ import android.animation.Animator
 import android.animation.AnimatorSet
 import android.animation.ValueAnimator
 import android.content.Context
-import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
+import android.util.Log
 import android.view.LayoutInflater
 import android.widget.FrameLayout
 import androidx.core.animation.doOnStart
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
+import com.bumptech.glide.load.DataSource
+import com.bumptech.glide.load.engine.GlideException
+import com.bumptech.glide.request.RequestListener
+import com.bumptech.glide.request.target.Target
 import ru.kolxz2.chertholder.databinding.MainPageFocusAccountCardBinding
 
 internal class CardholderLayout @JvmOverloads constructor(
@@ -30,17 +33,52 @@ internal class CardholderLayout @JvmOverloads constructor(
 
     private val children: List<MainPageFocusAccountCardBinding> = buildList {
         val inflater = LayoutInflater.from(context)
-        repeat(TOTAL_CARD_COUNT) { add(MainPageFocusAccountCardBinding.inflate(inflater, this@CardholderLayout, true)) }
+        repeat(TOTAL_CARD_COUNT) {
+            add(
+                MainPageFocusAccountCardBinding.inflate(
+                    inflater,
+                    this@CardholderLayout,
+                    true
+                )
+            )
+        }
     }
 
     private var animator: Animator? = null
+
+    private val glideLoggingListener = object : RequestListener<Drawable> {
+        override fun onLoadFailed(
+            e: GlideException?,
+            model: Any?,
+            target: Target<Drawable?>,
+            isFirstResource: Boolean,
+        ): Boolean {
+            Log.e("CardholderLayout", "Glide load failed for model=$model", e)
+            return false
+        }
+
+        override fun onResourceReady(
+            resource: Drawable,
+            model: Any,
+            target: Target<Drawable?>?,
+            dataSource: DataSource,
+            isFirstResource: Boolean,
+        ): Boolean {
+            Log.d("CardholderLayout", "Glide loaded resource from $dataSource for model=$model")
+            return false
+        }
+    }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
         for (i in 0 until childCount) {
             val child = getChildAt(i)
-            val widthMeasureSpec = MeasureSpec.makeMeasureSpec(child.measuredWidth, MeasureSpec.EXACTLY)
-            val heightMeasureSpec = MeasureSpec.makeMeasureSpec((child.measuredHeight * DEFAULT_CARD_RATIO).toInt(), MeasureSpec.EXACTLY)
+            val widthMeasureSpec =
+                MeasureSpec.makeMeasureSpec(child.measuredWidth, MeasureSpec.EXACTLY)
+            val heightMeasureSpec = MeasureSpec.makeMeasureSpec(
+                (child.measuredHeight * DEFAULT_CARD_RATIO).toInt(),
+                MeasureSpec.EXACTLY
+            )
             child.measure(widthMeasureSpec, heightMeasureSpec)
         }
     }
@@ -85,28 +123,59 @@ internal class CardholderLayout @JvmOverloads constructor(
             !animate -> {
                 // Apply state immediately
                 children.forEachIndexed { index, child ->
-                    val initial = cardStateFactory.getVisibleCardState(this, index, actualCards.size, isCollapsed)
+                    val initial = cardStateFactory.getVisibleCardState(
+                        this,
+                        index,
+                        actualCards.size,
+                        isCollapsed
+                    )
                     child.applyCardState(initial)
                     child.load(cardSources.getOrNull(index))
                 }
                 null
             }
+
             actualPreviousCards != actualCards -> {
                 // Animate hidden state
                 val hidden = animateTo { _, index ->
-                    cardStateFactory.getHiddenCardState(holder = this, index = index, count = actualPreviousCards.size, isCollapsed = collapsed)
+                    cardStateFactory.getHiddenCardState(
+                        holder = this,
+                        index = index,
+                        count = actualPreviousCards.size,
+                        isCollapsed = collapsed
+                    )
                 }
                 // Animate change state
                 val change = animateTo({ _, index ->
-                    cardStateFactory.getHiddenCardState(holder = this, index = index, count = actualPreviousCards.size, isCollapsed = collapsed)
+                    cardStateFactory.getHiddenCardState(
+                        holder = this,
+                        index = index,
+                        count = actualPreviousCards.size,
+                        isCollapsed = collapsed
+                    )
                 }, { _, index ->
-                    cardStateFactory.getHiddenCardState(holder = this, index = index, count = actualCards.size, isCollapsed = collapsed)
+                    cardStateFactory.getHiddenCardState(
+                        holder = this,
+                        index = index,
+                        count = actualCards.size,
+                        isCollapsed = collapsed
+                    )
                 })
                 // Animate visible state
                 val visible = animateTo({ _, index ->
-                    cardStateFactory.getHiddenCardState(holder = this, index = index, count = actualCards.size, isCollapsed = collapsed)
+                    cardStateFactory.getHiddenCardState(
+                        holder = this,
+                        index = index,
+                        count = actualCards.size,
+                        isCollapsed = collapsed
+                    )
                 }, { _, index ->
-                    cardStateFactory.getVisibleCardState(holder = this, index = index, count = actualCards.size, isCollapsed = collapsed)
+                    cardStateFactory.getVisibleCardState(
+                        holder = this,
+                        index = index,
+                        count = actualCards.size,
+                        isCollapsed = collapsed
+                    )
                 }).apply {
                     doOnStart { children.load(actualCards) }
                 }
@@ -118,12 +187,19 @@ internal class CardholderLayout @JvmOverloads constructor(
                     AnimatorSet().apply { playSequentially(hidden, change, visible) }
                 }
             }
+
             previousCollapsed != collapsed -> {
                 // Animate collapse state
                 animateTo { _, index ->
-                    cardStateFactory.getVisibleCardState(holder = this, index = index, count = actualCards.size, isCollapsed = collapsed)
+                    cardStateFactory.getVisibleCardState(
+                        holder = this,
+                        index = index,
+                        count = actualCards.size,
+                        isCollapsed = collapsed
+                    )
                 }
             }
+
             else -> null
         }
         animator?.duration = DEFAULT_CARD_DURATION
@@ -135,7 +211,13 @@ internal class CardholderLayout @JvmOverloads constructor(
         start: (MainPageFocusAccountCardBinding, Int) -> CardState = { child, _ -> child.getCardState() },
         end: (MainPageFocusAccountCardBinding, Int) -> CardState,
     ): Animator {
-        val transitions = children.mapIndexed { index, child -> Triple(child, start(child, index), end(child, index)) }
+        val transitions = children.mapIndexed { index, child ->
+            Triple(
+                child,
+                start(child, index),
+                end(child, index)
+            )
+        }
         return ValueAnimator.ofFloat(0f, 1f).apply {
             addUpdateListener {
                 for ((child, start, end) in transitions) {
@@ -170,13 +252,17 @@ internal class CardholderLayout @JvmOverloads constructor(
     }
 
     // Apply new card state by fraction
-    private fun MainPageFocusAccountCardBinding.applyCardState(start: CardState, end: CardState, fraction: Float) {
+    private fun MainPageFocusAccountCardBinding.applyCardState(
+        start: CardState,
+        end: CardState,
+        fraction: Float,
+    ) {
         root.translationX = start.translationX + (end.translationX - start.translationX) * fraction
         root.translationY = start.translationY + (end.translationY - start.translationY) * fraction
         root.translationZ = start.translationZ + (end.translationZ - start.translationZ) * fraction
         root.scaleX = start.scaleX + (end.scaleX - start.scaleX) * fraction
         root.scaleY = start.scaleY + (end.scaleY - start.scaleY) * fraction
-        root.pivotX = start.alpha + (end.alpha - start.alpha) * fraction
+        cardImage.alpha = start.alpha + (end.alpha - start.alpha) * fraction
     }
 
     private fun MainPageFocusAccountCardBinding.load(cardSource: CardSource?) {
@@ -184,15 +270,21 @@ internal class CardholderLayout @JvmOverloads constructor(
             is CardSource.UrlSource -> Glide
                 .with(cardImage)
                 .load(cardSource.url)
-                .diskCacheStrategy(DiskCacheStrategy.NONE)
+                .placeholder(ru.kolxz2.chertholder.R.drawable.placeholder_card_image)
+                .error(ru.kolxz2.chertholder.R.drawable.error_card_image)
+                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .transition(DrawableTransitionOptions.withCrossFade())
-                .skipMemoryCache(true)
+                .addListener(glideLoggingListener)
                 .into(cardImage)
+
             is CardSource.DrawableSource -> Glide
                 .with(cardImage)
                 .load(cardSource.icon)
+                .placeholder(ru.kolxz2.chertholder.R.drawable.placeholder_card_image)
+                .error(ru.kolxz2.chertholder.R.drawable.error_card_image)
                 .transition(DrawableTransitionOptions.withCrossFade())
                 .into(cardImage)
+
             else -> Glide
                 .with(cardImage)
                 .clear(cardImage)
@@ -222,9 +314,19 @@ internal class CardholderLayout @JvmOverloads constructor(
 
     interface CardStateFactory {
 
-        fun getVisibleCardState(holder: CardholderLayout, index: Int, count: Int, isCollapsed: Boolean): CardState
+        fun getVisibleCardState(
+            holder: CardholderLayout,
+            index: Int,
+            count: Int,
+            isCollapsed: Boolean,
+        ): CardState
 
-        fun getHiddenCardState(holder: CardholderLayout, index: Int, count: Int, isCollapsed: Boolean): CardState
+        fun getHiddenCardState(
+            holder: CardholderLayout,
+            index: Int,
+            count: Int,
+            isCollapsed: Boolean,
+        ): CardState
     }
 
     private companion object {
