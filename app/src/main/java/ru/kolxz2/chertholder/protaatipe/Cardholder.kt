@@ -6,20 +6,14 @@ import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
-import android.util.Log
 import android.view.LayoutInflater
-import android.view.View
 import android.widget.FrameLayout
 import androidx.core.animation.doOnStart
+import androidx.core.view.isGone
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
-import com.bumptech.glide.load.DataSource
-import com.bumptech.glide.load.engine.GlideException
-import com.bumptech.glide.request.RequestListener
-import com.bumptech.glide.request.target.Target
 import ru.kolxz2.chertholder.databinding.MainPageFocusAccountCardBinding
-import androidx.core.view.isGone
 
 internal class CardholderLayout @JvmOverloads constructor(
     context: Context,
@@ -47,29 +41,6 @@ internal class CardholderLayout @JvmOverloads constructor(
     }
 
     private var animator: Animator? = null
-
-    private val glideLoggingListener = object : RequestListener<Drawable> {
-        override fun onLoadFailed(
-            e: GlideException?,
-            model: Any?,
-            target: Target<Drawable?>,
-            isFirstResource: Boolean,
-        ): Boolean {
-            Log.e("CardholderLayout", "Glide load failed for model=$model", e)
-            return false
-        }
-
-        override fun onResourceReady(
-            resource: Drawable,
-            model: Any,
-            target: Target<Drawable?>?,
-            dataSource: DataSource,
-            isFirstResource: Boolean,
-        ): Boolean {
-            Log.d("CardholderLayout", "Glide loaded resource from $dataSource for model=$model")
-            return false
-        }
-    }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
@@ -122,10 +93,10 @@ internal class CardholderLayout @JvmOverloads constructor(
         animator?.cancel()
     }
 
-    fun setCards(
+    fun setCardsState(
         cardSources: List<CardSource> = this.cardSources,
         isCollapsed: Boolean = this.isCollapsed,
-        isAnimate: Boolean,
+        isAnimate: Boolean = true,
     ) {
         applyChange(
             cards = cardSources,
@@ -301,18 +272,13 @@ internal class CardholderLayout @JvmOverloads constructor(
             is CardSource.UrlSource -> Glide
                 .with(cardImage)
                 .load(cardSource.url)
-                .placeholder(ru.kolxz2.chertholder.R.drawable.placeholder_card_image)
-                .error(ru.kolxz2.chertholder.R.drawable.error_card_image)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .transition(DrawableTransitionOptions.withCrossFade())
-                .addListener(glideLoggingListener)
                 .into(cardImage)
 
             is CardSource.DrawableSource -> Glide
                 .with(cardImage)
                 .load(cardSource.icon)
-                .placeholder(ru.kolxz2.chertholder.R.drawable.placeholder_card_image)
-                .error(ru.kolxz2.chertholder.R.drawable.error_card_image)
                 .transition(DrawableTransitionOptions.withCrossFade())
                 .into(cardImage)
 

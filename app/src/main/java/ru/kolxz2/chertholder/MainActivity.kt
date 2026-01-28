@@ -64,15 +64,17 @@ class MainActivity : AppCompatActivity() {
             val stack = binding.cardStackLayout
             val nextUrls = if (isShowingReplacementUrls) imageUrls else replacementUrls
             if (stack != null) {
-                stack.setCards(nextUrls, false, true)
+                stack.setCardsState(nextUrls)
                 isShowingReplacementUrls = !isShowingReplacementUrls
             }
         }
 
-//        binding.btnAnim2.setOnClickListener {
-//            val stack = binding.cardStackLayout
-//            stack?.animateCompress()
-//        }
+        binding.btnAnim2.setOnClickListener {
+            val stack = binding.cardStackLayout
+            stack.setCardsState(isCollapsed = isShowingReplacementUrls)
+            isShowingReplacementUrls = !isShowingReplacementUrls
+
+        }
 //
 //        binding.btnAnim3.setOnClickListener {
 //            val stack = binding.cardStackLayout
