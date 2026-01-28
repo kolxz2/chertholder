@@ -11,6 +11,9 @@ activity = "1.11.0"
 constraintlayout = "2.1.4"
 recyclerview = "1.4.0"
 coil = "2.7.0"
+glide = "4.16.0"
+lifecycleRuntimeKtx = "2.8.7"
+coroutines = "1.9.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -23,6 +26,9 @@ androidx-activity = { group = "androidx.activity", name = "activity", version.re
 androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
 androidx-recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerview" }
 coil = { group = "io.coil-kt", name = "coil", version.ref = "coil" }
+glide = { group = "com.github.bumptech.glide", name = "glide", version.ref = "glide" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

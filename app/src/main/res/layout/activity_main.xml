@@ -7,25 +7,25 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <ru.kolxz2.chertholder.CardStackLayout
+<!--    <ru.kolxz2.chertholder.CardStackLayout-->
+<!--        android:id="@+id/cardStackLayout"-->
+<!--        android:layout_width="0dp"-->
+<!--        android:layout_height="wrap_content"-->
+<!--        app:layout_constraintTop_toTopOf="parent"-->
+<!--        app:layout_constraintStart_toStartOf="parent"-->
+<!--        app:layout_constraintEnd_toEndOf="parent"-->
+<!--        android:layout_marginTop="16dp" />-->
+
+    <ru.kolxz2.chertholder.protaatipe.CardholderLayout
         android:id="@+id/cardStackLayout"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="16dp" />
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recyclerView"
-        android:layout_width="0dp"
-        android:layout_height="220dp"
-        android:background="#FFE3F2FD"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:clipToPadding="false"
-        android:padding="8dp" />
 
     <LinearLayout
         android:id="@+id/controlsBar"

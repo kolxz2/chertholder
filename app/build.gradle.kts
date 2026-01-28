@@ -32,10 +32,18 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+
     }
     kotlinOptions {
         jvmTarget = "11"
     }
+
+    kotlinOptions {
+        compileOptions {
+            freeCompilerArgs += "-Xwhen-guards"
+        }
+    }
+
 }
 
 dependencies {
@@ -47,6 +55,9 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.recyclerview)
     implementation(libs.coil)
+    implementation(libs.glide)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.kotlinx.coroutines.android)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
