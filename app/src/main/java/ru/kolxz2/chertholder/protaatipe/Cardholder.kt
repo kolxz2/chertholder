@@ -8,6 +8,7 @@ import android.graphics.drawable.Drawable
 import android.util.AttributeSet
 import android.util.Log
 import android.view.LayoutInflater
+import android.view.View
 import android.widget.FrameLayout
 import androidx.core.animation.doOnStart
 import com.bumptech.glide.Glide
@@ -80,6 +81,29 @@ internal class CardholderLayout @JvmOverloads constructor(
                 MeasureSpec.EXACTLY
             )
             child.measure(widthMeasureSpec, heightMeasureSpec)
+        }
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        val availableWidth = (right - left) - paddingLeft - paddingRight
+
+        for (i in 0 until childCount) {
+            val child = getChildAt(i)
+            if (child.visibility == View.GONE) continue
+
+            val lp = child.layoutParams as MarginLayoutParams
+            val totalWidth = child.measuredWidth + lp.leftMargin + lp.rightMargin
+            val centeredLeft = paddingLeft + ((availableWidth - totalWidth) / 2)
+            val childLeft = centeredLeft + lp.leftMargin
+            val childTop = paddingTop + lp.topMargin
+            val childRight = childLeft + child.measuredWidth
+            val childBottom = childTop + child.measuredHeight
+
+            child.layout(childLeft, childTop, childRight, childBottom)
+
+            // Ensure the card is scaled around its horizontal center after it has a valid size.
+            child.pivotX = child.measuredWidth / 2f
+            child.pivotY = 0f
         }
     }
 
@@ -246,8 +270,6 @@ internal class CardholderLayout @JvmOverloads constructor(
         root.translationZ = cardState.translationZ
         root.scaleX = cardState.scaleX
         root.scaleY = cardState.scaleY
-        root.pivotX = width / 2f
-        root.pivotY = 0f
         cardImage.alpha = cardState.alpha
     }
 
@@ -262,6 +284,10 @@ internal class CardholderLayout @JvmOverloads constructor(
         root.translationZ = start.translationZ + (end.translationZ - start.translationZ) * fraction
         root.scaleX = start.scaleX + (end.scaleX - start.scaleX) * fraction
         root.scaleY = start.scaleY + (end.scaleY - start.scaleY) * fraction
+        if (root.width > 0) {
+            root.pivotX = root.width / 2f
+            root.pivotY = 0f
+        }
         cardImage.alpha = start.alpha + (end.alpha - start.alpha) * fraction
     }
 

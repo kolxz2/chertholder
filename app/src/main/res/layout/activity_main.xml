@@ -18,7 +18,7 @@
 
     <ru.kolxz2.chertholder.protaatipe.CardholderLayout
         android:id="@+id/cardStackLayout"
-        android:layout_width="0dp"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_vertical"
         app:layout_constraintTop_toTopOf="parent"
