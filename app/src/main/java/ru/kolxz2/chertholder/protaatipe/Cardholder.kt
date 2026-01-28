@@ -46,13 +46,13 @@ internal class CardholderLayout @JvmOverloads constructor(
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
         for (i in 0 until childCount) {
             val child = getChildAt(i)
-            val widthMeasureSpec =
+            val childWidthSpec =
                 MeasureSpec.makeMeasureSpec(child.measuredWidth, MeasureSpec.EXACTLY)
-            val heightMeasureSpec = MeasureSpec.makeMeasureSpec(
+            val childHeightSpec = MeasureSpec.makeMeasureSpec(
                 (child.measuredHeight * DEFAULT_CARD_RATIO).toInt(),
                 MeasureSpec.EXACTLY
             )
-            child.measure(widthMeasureSpec, heightMeasureSpec)
+            child.measure(childWidthSpec, childHeightSpec)
         }
     }
 
@@ -73,7 +73,6 @@ internal class CardholderLayout @JvmOverloads constructor(
 
             child.layout(childLeft, childTop, childRight, childBottom)
 
-            // Ensure the card is scaled around its horizontal center after it has a valid size.
             child.pivotX = child.measuredWidth / 2f
             child.pivotY = 0f
         }
@@ -121,83 +120,21 @@ internal class CardholderLayout @JvmOverloads constructor(
         animator?.cancel()
         animator = when {
             !animate -> {
-                // Apply state immediately
-                children.forEachIndexed { index, child ->
-                    val initial = cardStateFactory.getVisibleCardState(
-                        this,
-                        index,
-                        actualCards.size,
-                        isCollapsed
-                    )
-                    child.applyCardState(initial)
-                    child.load(cardSources.getOrNull(index))
-                }
+                applyWithoutAnimation(actualCards, collapsed)
                 null
             }
 
             actualPreviousCards != actualCards -> {
-                // Animate hidden state
-                val hidden = animateTo { _, index ->
-                    cardStateFactory.getHiddenCardState(
-                        holder = this,
-                        index = index,
-                        count = actualPreviousCards.size,
-                        isCollapsed = collapsed
-                    )
-                }
-                // Animate change state
-                val change = animateTo({ _, index ->
-                    cardStateFactory.getHiddenCardState(
-                        holder = this,
-                        index = index,
-                        count = actualPreviousCards.size,
-                        isCollapsed = collapsed
-                    )
-                }, { _, index ->
-                    cardStateFactory.getHiddenCardState(
-                        holder = this,
-                        index = index,
-                        count = actualCards.size,
-                        isCollapsed = collapsed
-                    )
-                })
-                // Animate visible state
-                val visible = animateTo({ _, index ->
-                    cardStateFactory.getHiddenCardState(
-                        holder = this,
-                        index = index,
-                        count = actualCards.size,
-                        isCollapsed = collapsed
-                    )
-                }, { _, index ->
-                    cardStateFactory.getVisibleCardState(
-                        holder = this,
-                        index = index,
-                        count = actualCards.size,
-                        isCollapsed = collapsed
-                    )
-                }).apply {
-                    doOnStart { children.load(actualCards) }
-                }
-                if (previousCard.isEmpty()) {
-                    // Only visible animation
-                    visible
-                } else {
-                    // Hidden -> Change -> Visible
-                    AnimatorSet().apply { playSequentially(hidden, change, visible) }
-                }
+                createCardsChangeAnimator(
+                    previousCards = actualPreviousCards,
+                    newCards = actualCards,
+                    isCollapsed = collapsed,
+                    hasPreviousCards = previousCard.isNotEmpty(),
+                )
             }
 
             previousCollapsed != collapsed -> {
-                // Animate collapse state
-                animateTo { _, index ->
-                    cardStateFactory.getVisibleCardState(
-                        holder = this,
-                        index = index,
-                        count = actualCards.size,
-                        isCollapsed = collapsed
-                    )
-                }
+                createCollapseAnimator(actualCards, collapsed)
             }
 
             else -> null
@@ -206,7 +143,6 @@ internal class CardholderLayout @JvmOverloads constructor(
         animator?.start()
     }
 
-    // Return animator between start and end card state
     private fun animateTo(
         start: (MainPageFocusAccountCardBinding, Int) -> CardState = { child, _ -> child.getCardState() },
         end: (MainPageFocusAccountCardBinding, Int) -> CardState,
@@ -227,7 +163,6 @@ internal class CardholderLayout @JvmOverloads constructor(
         }
     }
 
-    // Return current state snapshot
     private fun MainPageFocusAccountCardBinding.getCardState(): CardState {
         return CardState(
             translationX = root.translationX,
@@ -239,7 +174,6 @@ internal class CardholderLayout @JvmOverloads constructor(
         )
     }
 
-    // Apply new card state to card view
     private fun MainPageFocusAccountCardBinding.applyCardState(cardState: CardState) {
         root.translationX = cardState.translationX
         root.translationY = cardState.translationY
@@ -249,7 +183,6 @@ internal class CardholderLayout @JvmOverloads constructor(
         cardImage.alpha = cardState.alpha
     }
 
-    // Apply new card state by fraction
     private fun MainPageFocusAccountCardBinding.applyCardState(
         start: CardState,
         end: CardState,
@@ -265,6 +198,98 @@ internal class CardholderLayout @JvmOverloads constructor(
             root.pivotY = 0f
         }
         cardImage.alpha = start.alpha + (end.alpha - start.alpha) * fraction
+    }
+
+    private fun applyWithoutAnimation(
+        cards: List<CardSource>,
+        collapsed: Boolean,
+    ) {
+        children.forEachIndexed { index, child ->
+            val initial = cardStateFactory.getVisibleCardState(
+                holder = this,
+                index = index,
+                count = cards.size,
+                isCollapsed = collapsed,
+            )
+            child.applyCardState(initial)
+            child.load(cards.getOrNull(index))
+        }
+    }
+
+    private fun createCardsChangeAnimator(
+        previousCards: List<CardSource>,
+        newCards: List<CardSource>,
+        isCollapsed: Boolean,
+        hasPreviousCards: Boolean,
+    ): Animator {
+        val hideAnimator = animateTo { _, index ->
+            cardStateFactory.getHiddenCardState(
+                holder = this,
+                index = index,
+                count = previousCards.size,
+                isCollapsed = isCollapsed,
+            )
+        }
+
+        val switchAnimator = animateTo(
+            start = { _, index ->
+                cardStateFactory.getHiddenCardState(
+                    holder = this,
+                    index = index,
+                    count = previousCards.size,
+                    isCollapsed = isCollapsed,
+                )
+            },
+            end = { _, index ->
+                cardStateFactory.getHiddenCardState(
+                    holder = this,
+                    index = index,
+                    count = newCards.size,
+                    isCollapsed = isCollapsed,
+                )
+            },
+        )
+
+        val showAnimator = animateTo(
+            start = { _, index ->
+                cardStateFactory.getHiddenCardState(
+                    holder = this,
+                    index = index,
+                    count = newCards.size,
+                    isCollapsed = isCollapsed,
+                )
+            },
+            end = { _, index ->
+                cardStateFactory.getVisibleCardState(
+                    holder = this,
+                    index = index,
+                    count = newCards.size,
+                    isCollapsed = isCollapsed,
+                )
+            },
+        ).apply {
+            doOnStart { children.load(newCards) }
+        }
+
+        return if (!hasPreviousCards) {
+            showAnimator
+        } else {
+            AnimatorSet().apply { playSequentially(hideAnimator, switchAnimator, showAnimator) }
+        }
+    }
+
+    private fun createCollapseAnimator(
+        cards: List<CardSource>,
+        collapsed: Boolean,
+    ): Animator {
+        return animateTo { _, index ->
+            cardStateFactory.getVisibleCardState(
+                holder = this,
+                index = index,
+                count = cards.size,
+                isCollapsed = collapsed,
+            )
+        }
     }
 
     private fun MainPageFocusAccountCardBinding.load(cardSource: CardSource?) {

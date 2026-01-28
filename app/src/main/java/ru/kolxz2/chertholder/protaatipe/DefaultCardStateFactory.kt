@@ -1,15 +1,10 @@
 package ru.kolxz2.chertholder.protaatipe
 
-
 import android.content.Context
 import android.content.res.Resources
-import android.view.View
 import androidx.annotation.Px
 import kotlin.math.pow
 
-/**
- * @author y.khan
- */
 internal class DefaultCardStateFactory : CardholderLayout.CardStateFactory {
 
     override fun getVisibleCardState(
@@ -133,15 +128,11 @@ internal class DefaultCardStateFactory : CardholderLayout.CardStateFactory {
     }
 
     @Px
-    fun Context.dpToPxAsFloat(dp: Float): Float {
-        return dpToPxAsFloat(dp, resources)
-    }
-
+    private fun Context.dpToPxAsFloat(dp: Float): Float = dpToPxAsFloat(dp, resources)
 
     @Px
-    fun dpToPxAsFloat(dp: Float, resources: Resources): Float {
-        return dp * resources.displayMetrics.density
-    }
+    private fun dpToPxAsFloat(dp: Float, resources: Resources): Float =
+        dp * resources.displayMetrics.density
 
     private fun getDefaultScale(index: Int): Float {
         return CARD_DEFAULT_SCALE.pow(index)
