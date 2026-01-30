@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/shimmerStub"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:padding="8dp">
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/shimmerCardBack"
+        android:layout_width="280dp"
+        android:layout_height="140dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="0dp"
+        app:cardBackgroundColor="@color/shimmer_placeholder"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="2dp" />
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/shimmerCardMiddle"
+        android:layout_width="280dp"
+        android:layout_height="140dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="24dp"
+        app:cardBackgroundColor="@color/shimmer_placeholder"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="2dp" />
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/shimmerCardFront"
+        android:layout_width="280dp"
+        android:layout_height="140dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="48dp"
+        app:cardBackgroundColor="@color/shimmer_placeholder"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="2dp" />
+</FrameLayout>

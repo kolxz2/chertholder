@@ -16,15 +16,29 @@
 <!--        app:layout_constraintEnd_toEndOf="parent"-->
 <!--        android:layout_marginTop="16dp" />-->
 
-    <ru.kolxz2.chertholder.protaatipe.CardholderLayout
-        android:id="@+id/cardStackLayout"
+    <FrameLayout
+        android:id="@+id/cardStackContainer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center_vertical"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="16dp" />
+        android:layout_marginTop="16dp">
+
+        <ru.kolxz2.chertholder.protaatipe.CardholderLayout
+            android:id="@+id/cardStackLayout"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center" />
+
+        <include
+            android:id="@+id/shimmerStubInclude"
+            layout="@layout/shimmer_stub"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="visible" />
+    </FrameLayout>
 
 
     <LinearLayout
