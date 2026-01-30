@@ -7,12 +7,14 @@ import android.content.Context
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import android.view.animation.AnimationUtils
 import android.widget.FrameLayout
 import androidx.core.animation.doOnStart
 import androidx.core.view.isGone
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
+import ru.kolxz2.chertholder.R
 import ru.kolxz2.chertholder.databinding.MainPageFocusAccountCardBinding
 
 internal class CardholderLayout @JvmOverloads constructor(
@@ -146,7 +148,7 @@ internal class CardholderLayout @JvmOverloads constructor(
     private fun animateTo(
         start: (MainPageFocusAccountCardBinding, Int) -> CardState = { child, _ -> child.getCardState() },
         end: (MainPageFocusAccountCardBinding, Int) -> CardState,
-    ): Animator {
+    ): ValueAnimator {
         val transitions = children.mapIndexed { index, child ->
             Triple(
                 child,
@@ -289,6 +291,8 @@ internal class CardholderLayout @JvmOverloads constructor(
                 count = cards.size,
                 isCollapsed = collapsed,
             )
+        }.apply {
+            interpolator = AnimationUtils.loadInterpolator(context, R.anim.card_compress_interpolator)
         }
     }
 
