@@ -13,7 +13,11 @@ import androidx.core.animation.doOnStart
 import androidx.core.view.isGone
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
+import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
+import com.bumptech.glide.request.RequestListener
+import com.bumptech.glide.request.target.Target
+import java.util.concurrent.atomic.AtomicInteger
 import ru.kolxz2.chertholder.R
 import ru.kolxz2.chertholder.databinding.MainPageFocusAccountCardBinding
 
@@ -24,6 +28,11 @@ internal class CardholderLayout @JvmOverloads constructor(
 ) : FrameLayout(context, attrs, defStyleAttr) {
 
     var cardStateFactory: CardStateFactory = DefaultCardStateFactory()
+
+    var onAllImagesLoaded: (() -> Unit)? = null
+
+    private val pendingImageLoads = AtomicInteger(0)
+    private val loadBatchId = AtomicInteger(0)
 
     private var cardSources: List<CardSource> = emptyList()
 
@@ -82,11 +91,13 @@ internal class CardholderLayout @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        applyChange(
-            cards = cardSources,
-            collapsed = isCollapsed,
-            animate = false,
-        )
+        if (cardSources.isNotEmpty()) {
+            applyChange(
+                cards = cardSources,
+                collapsed = isCollapsed,
+                animate = false,
+            )
+        }
     }
 
     override fun onDetachedFromWindow() {
@@ -202,19 +213,31 @@ internal class CardholderLayout @JvmOverloads constructor(
         cardImage.alpha = start.alpha + (end.alpha - start.alpha) * fraction
     }
 
+    private fun startImageLoadBatch(cards: List<CardSource>, onLoad: () -> Unit) {
+        loadBatchId.incrementAndGet()
+        pendingImageLoads.set(cards.count { it is CardSource.UrlSource || it is CardSource.DrawableSource })
+        if (pendingImageLoads.get() == 0) {
+            onAllImagesLoaded?.invoke()
+        } else {
+            onLoad()
+        }
+    }
+
     private fun applyWithoutAnimation(
         cards: List<CardSource>,
         collapsed: Boolean,
     ) {
-        children.forEachIndexed { index, child ->
-            val initial = cardStateFactory.getVisibleCardState(
-                holder = this,
-                index = index,
-                count = cards.size,
-                isCollapsed = collapsed,
-            )
-            child.applyCardState(initial)
-            child.load(cards.getOrNull(index))
+        startImageLoadBatch(cards) {
+            children.forEachIndexed { index, child ->
+                val initial = cardStateFactory.getVisibleCardState(
+                    holder = this,
+                    index = index,
+                    count = cards.size,
+                    isCollapsed = collapsed,
+                )
+                child.applyCardState(initial)
+                child.load(cards.getOrNull(index))
+            }
         }
     }
 
@@ -270,10 +293,13 @@ internal class CardholderLayout @JvmOverloads constructor(
                 )
             },
         ).apply {
-            doOnStart { children.load(newCards) }
+            if (hasPreviousCards) {
+                doOnStart { startImageLoadBatch(newCards) { children.load(newCards) } }
+            }
         }
 
         return if (!hasPreviousCards) {
+            startImageLoadBatch(newCards) { children.load(newCards) }
             showAnimator
         } else {
             AnimatorSet().apply { playSequentially(hideAnimator, switchAnimator, showAnimator) }
@@ -292,23 +318,51 @@ internal class CardholderLayout @JvmOverloads constructor(
                 isCollapsed = collapsed,
             )
         }.apply {
-            interpolator = AnimationUtils.loadInterpolator(context, R.anim.card_compress_interpolator)
+            interpolator =
+                AnimationUtils.loadInterpolator(context, R.anim.card_compress_interpolator)
         }
     }
 
+    private fun onImageLoadComplete(batchId: Int): Boolean {
+        if (batchId != loadBatchId.get()) return false
+        if (pendingImageLoads.decrementAndGet() == 0) {
+            onAllImagesLoaded?.invoke()
+        }
+        return false
+    }
+
     private fun MainPageFocusAccountCardBinding.load(cardSource: CardSource?) {
+        val batchId = loadBatchId.get()
+        val loadCompleteListener = object : RequestListener<Drawable> {
+            override fun onLoadFailed(
+                e: GlideException?,
+                model: Any?,
+                target: Target<Drawable?>,
+                isFirstResource: Boolean,
+            ) = onImageLoadComplete(batchId)
+
+            override fun onResourceReady(
+                resource: Drawable,
+                model: Any,
+                target: Target<Drawable>?,
+                dataSource: com.bumptech.glide.load.DataSource,
+                isFirstResource: Boolean,
+            ) = onImageLoadComplete(batchId)
+        }
         when (cardSource) {
             is CardSource.UrlSource -> Glide
                 .with(cardImage)
                 .load(cardSource.url)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .transition(DrawableTransitionOptions.withCrossFade())
+                .listener(loadCompleteListener)
                 .into(cardImage)
 
             is CardSource.DrawableSource -> Glide
                 .with(cardImage)
                 .load(cardSource.icon)
                 .transition(DrawableTransitionOptions.withCrossFade())
+                .listener(loadCompleteListener)
                 .into(cardImage)
 
             else -> Glide
