@@ -1,18 +1,21 @@
 package ru.kolxz2.chertholder
 
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import ru.kolxz2.chertholder.databinding.ActivityMainBinding
 import ru.kolxz2.chertholder.protaatipe.CardholderLayout
+
 
 internal class RecyclerAdapter(
     private var imageUrls: List<CardholderLayout.CardSource>,
-    private val onAllImagesLoaded: () -> Unit
+    private val binding: ActivityMainBinding,
 ) : RecyclerView.Adapter<RecyclerAdapter.RecyclerViewHolder>() {
 
     private var boundHolder: RecyclerViewHolder? = null
 
     class RecyclerViewHolder(
-        val cardholderLayout: CardholderLayout
+        val cardholderLayout: CardholderLayout,
     ) : RecyclerView.ViewHolder(cardholderLayout)
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerViewHolder {
@@ -27,7 +30,9 @@ internal class RecyclerAdapter(
 
     override fun onBindViewHolder(holder: RecyclerViewHolder, position: Int) {
         boundHolder = holder
-        holder.cardholderLayout.onAllImagesLoaded = onAllImagesLoaded
+        holder.cardholderLayout.onAllImagesLoaded = {
+            binding.shimmerStubInclude.root.visibility = View.GONE
+        }
         holder.cardholderLayout.setCardsState(imageUrls)
     }
 
@@ -42,7 +47,7 @@ internal class RecyclerAdapter(
 
     fun setCardsState(
         cardSources: List<CardholderLayout.CardSource> = imageUrls,
-        isCollapsed: Boolean? = null
+        isCollapsed: Boolean? = null,
     ) {
         imageUrls = cardSources
         boundHolder?.cardholderLayout?.let { layout ->

@@ -41,9 +41,7 @@ class MainActivity : AppCompatActivity() {
         var isShowingReplacementUrls = false
         binding.shimmerStubInclude.root.visibility = View.VISIBLE
 
-        val adapter = RecyclerAdapter(imageUrls) {
-            binding.shimmerStubInclude.root.visibility = View.GONE
-        }
+        val adapter = RecyclerAdapter(imageUrls, binding)
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
         binding.recyclerView.adapter = adapter
 

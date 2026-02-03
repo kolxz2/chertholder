@@ -91,7 +91,7 @@ internal class CardholderLayout @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        if (cardSources.isNotEmpty()) {
+        if (cardSources.isNotEmpty() && pendingImageLoads.get() == 0) {
             applyChange(
                 cards = cardSources,
                 collapsed = isCollapsed,
@@ -353,7 +353,7 @@ internal class CardholderLayout @JvmOverloads constructor(
             is CardSource.UrlSource -> Glide
                 .with(cardImage)
                 .load(cardSource.url)
-                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                .diskCacheStrategy(DiskCacheStrategy.NONE)
                 .transition(DrawableTransitionOptions.withCrossFade())
                 .listener(loadCompleteListener)
                 .into(cardImage)
