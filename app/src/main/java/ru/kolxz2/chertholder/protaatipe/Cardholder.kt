@@ -9,6 +9,7 @@ import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.animation.AnimationUtils
 import android.widget.FrameLayout
+import androidx.core.animation.doOnEnd
 import androidx.core.animation.doOnStart
 import androidx.core.view.isGone
 import com.bumptech.glide.Glide
@@ -52,6 +53,8 @@ internal class CardholderLayout @JvmOverloads constructor(
     }
 
     private var animator: Animator? = null
+    private var pendingShowAnimator: Animator? = null
+    private var pendingShowBatchId: Int = -1
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
@@ -103,6 +106,7 @@ internal class CardholderLayout @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         animator?.cancel()
+        clearPendingShow()
     }
 
     fun setCardsState(
@@ -131,6 +135,7 @@ internal class CardholderLayout @JvmOverloads constructor(
         val actualPreviousCards = previousCard.take(childCount)
         val actualCards = cards.take(childCount)
         animator?.cancel()
+        clearPendingShow()
         animator = when {
             !animate -> {
                 applyWithoutAnimation(actualCards, collapsed)
@@ -246,64 +251,41 @@ internal class CardholderLayout @JvmOverloads constructor(
         newCards: List<CardSource>,
         isCollapsed: Boolean,
         hasPreviousCards: Boolean,
-    ): Animator {
-        val hideAnimator = animateTo { _, index ->
-            cardStateFactory.getHiddenCardState(
-                holder = this,
-                index = index,
-                count = previousCards.size,
-                isCollapsed = isCollapsed,
-            )
+    ): Animator? {
+        val count = newCards.size
+        fun hiddenState(c: Int) = { _: MainPageFocusAccountCardBinding, i: Int ->
+            cardStateFactory.getHiddenCardState(this, i, c, isCollapsed)
+        }
+        fun visibleState(c: Int) = { _: MainPageFocusAccountCardBinding, i: Int ->
+            cardStateFactory.getVisibleCardState(this, i, c, isCollapsed)
         }
 
-        val switchAnimator = animateTo(
-            start = { _, index ->
-                cardStateFactory.getHiddenCardState(
-                    holder = this,
-                    index = index,
-                    count = previousCards.size,
-                    isCollapsed = isCollapsed,
-                )
-            },
-            end = { _, index ->
-                cardStateFactory.getHiddenCardState(
-                    holder = this,
-                    index = index,
-                    count = newCards.size,
-                    isCollapsed = isCollapsed,
-                )
-            },
-        )
+        val showAnimator = animateTo(start = hiddenState(count), end = visibleState(count))
 
-        val showAnimator = animateTo(
-            start = { _, index ->
-                cardStateFactory.getHiddenCardState(
-                    holder = this,
-                    index = index,
-                    count = newCards.size,
-                    isCollapsed = isCollapsed,
-                )
-            },
-            end = { _, index ->
-                cardStateFactory.getVisibleCardState(
-                    holder = this,
-                    index = index,
-                    count = newCards.size,
-                    isCollapsed = isCollapsed,
-                )
-            },
-        ).apply {
-            if (hasPreviousCards) {
-                doOnStart { startImageLoadBatch(newCards) { children.load(newCards) } }
+        if (!hasPreviousCards) {
+            children.forEachIndexed { index, child ->
+                child.applyCardState(cardStateFactory.getHiddenCardState(this, index, count, isCollapsed))
+            }
+            startImageLoadBatch(newCards) { children.load(newCards) }
+            pendingShowAnimator = showAnimator
+            pendingShowBatchId = loadBatchId.get()
+            return null
+        }
+
+        val hideAnimator = animateTo(end = hiddenState(previousCards.size)).apply {
+            doOnStart {
+                startImageLoadBatch(newCards) { children.load(newCards) }
+                pendingShowAnimator = showAnimator
+                pendingShowBatchId = loadBatchId.get()
             }
         }
 
-        return if (!hasPreviousCards) {
-            startImageLoadBatch(newCards) { children.load(newCards) }
-            showAnimator
-        } else {
-            AnimatorSet().apply { playSequentially(hideAnimator, switchAnimator, showAnimator) }
-        }
+        val switchAnimator = animateTo(
+            start = hiddenState(previousCards.size),
+            end = hiddenState(count),
+        ).apply { doOnEnd { startPendingShowIfMatchingBatch(loadBatchId.get()) } }
+
+        return AnimatorSet().apply { playSequentially(hideAnimator, switchAnimator) }
     }
 
     private fun createCollapseAnimator(
@@ -323,10 +305,26 @@ internal class CardholderLayout @JvmOverloads constructor(
         }
     }
 
+    private fun clearPendingShow() {
+        pendingShowAnimator?.cancel()
+        pendingShowAnimator = null
+        pendingShowBatchId = -1
+    }
+
+    private fun startPendingShowIfMatchingBatch(batchId: Int) {
+        if (pendingImageLoads.get() != 0 || pendingShowAnimator == null || pendingShowBatchId != batchId) return
+        val toStart = pendingShowAnimator
+        clearPendingShow()
+        animator = toStart
+        toStart?.duration = DEFAULT_CARD_DURATION
+        toStart?.start()
+    }
+
     private fun onImageLoadComplete(batchId: Int): Boolean {
         if (batchId != loadBatchId.get()) return false
         if (pendingImageLoads.decrementAndGet() == 0) {
             onAllImagesLoaded?.invoke()
+            startPendingShowIfMatchingBatch(batchId)
         }
         return false
     }
