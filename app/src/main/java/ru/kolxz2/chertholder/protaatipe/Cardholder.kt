@@ -10,13 +10,10 @@ import android.view.LayoutInflater
 import android.view.animation.AnimationUtils
 import android.widget.FrameLayout
 import androidx.core.animation.doOnStart
-import androidx.core.view.isGone
+import androidx.core.content.ContextCompat
 import com.bumptech.glide.Glide
-import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
-import com.bumptech.glide.request.RequestListener
-import com.bumptech.glide.request.target.Target
 import ru.kolxz2.chertholder.R
 import ru.kolxz2.chertholder.databinding.MainPageFocusAccountCardBinding
 
@@ -275,11 +272,14 @@ internal class CardholderLayout @JvmOverloads constructor(
                 isCollapsed = collapsed,
             )
         }.apply {
-            interpolator = AnimationUtils.loadInterpolator(context, R.anim.card_compress_interpolator)
+            interpolator =
+                AnimationUtils.loadInterpolator(context, R.anim.card_compress_interpolator)
         }
     }
 
     private fun MainPageFocusAccountCardBinding.load(cardSource: CardSource?) {
+        val placeholder =
+            ContextCompat.getDrawable(cardImage.context, R.drawable.placeholder_card_image)
         when (cardSource) {
             is CardSource.UrlSource -> {
                 val fallbackUrl = defaultFallbackUrl
@@ -287,31 +287,18 @@ internal class CardholderLayout @JvmOverloads constructor(
                     .load(cardSource.url)
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .transition(DrawableTransitionOptions.withCrossFade())
-                    .listener(object : RequestListener<Drawable> {
-                        override fun onLoadFailed(
-                            e: GlideException?,
-                            model: Any?,
-                            target: Target<Drawable>,
-                            isFirstResource: Boolean,
-                        ): Boolean {
-                            if (fallbackUrl != null) {
+                    .placeholder(placeholder)
+                    .let { request ->
+                        if (fallbackUrl != null) {
+                            request.error(
                                 Glide.with(cardImage)
                                     .load(fallbackUrl)
                                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                                     .transition(DrawableTransitionOptions.withCrossFade())
-                                    .into(cardImage)
-                            }
-                            return true
-                        }
-
-                        override fun onResourceReady(
-                            resource: Drawable,
-                            model: Any,
-                            target: Target<Drawable>?,
-                            dataSource: com.bumptech.glide.load.DataSource,
-                            isFirstResource: Boolean,
-                        ): Boolean = false
-                    })
+                                    .placeholder(placeholder),
+                            )
+                        } else request
+                    }
                     .into(cardImage)
             }
 
@@ -319,6 +306,7 @@ internal class CardholderLayout @JvmOverloads constructor(
                 .with(cardImage)
                 .load(cardSource.icon)
                 .transition(DrawableTransitionOptions.withCrossFade())
+                .placeholder(placeholder)
                 .into(cardImage)
 
             else -> Glide

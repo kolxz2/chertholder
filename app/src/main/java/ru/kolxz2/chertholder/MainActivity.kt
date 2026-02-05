@@ -48,13 +48,15 @@ class MainActivity : AppCompatActivity() {
 
         val imageUrls = listOf(
             CardholderLayout.CardSource.UrlSource("https://storage-api.petstory.ru/resize/0x0x100/07/e2/bb/07e2bb0a343f4874979064b4e4066d96.jpeg"),
-            CardholderLayout.CardSource.UrlSource("https://storage-api.petstory.ru/resize/0x0x100/14/09/a3/1409a33b47794d7eb21d05b6120856c8.jpeg"),
+            CardholderLayout.CardSource.UrlSource("https://storage-api.petstorpeg"),
             CardholderLayout.CardSource.UrlSource("https://storage-api.petstory.ru/resize/0x0x100/64/fa/44/64fa440130a54c849ab1742035ae0a39.jpeg")
         )
 
         // Track what data set is currently shown in the stack.
         // Starts with imageUrls because adapter binds that initially.
         var isShowingReplacementUrls = false
+
+        binding.cardStackLayout.setCardsState(imageUrls, defaultUrl = "https://bipbap.ru/wp-content/uploads/2017/04/72fqw2qq3kxh.jpg")
 //
 //        val adapter = RecyclerAdapter(imageUrls)
 //        binding.recyclerView.layoutManager = LinearLayoutManager(this)
