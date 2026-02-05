@@ -54,9 +54,7 @@ internal class DefaultCardStateFactory : CardholderLayout.CardStateFactory {
     )
 
     private fun CardholderLayout.CardState.toOutOfBounds(holder: CardholderLayout): CardholderLayout.CardState =
-        copy(
-            translationY = translationY + holder.height
-        )
+        copy(translationY = translationY + holder.height)
 
     private fun getCollapsedTranslationY(holder: CardholderLayout, index: Int, count: Int): Float {
         return when (count) {
