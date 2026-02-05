@@ -12,8 +12,11 @@ import android.widget.FrameLayout
 import androidx.core.animation.doOnStart
 import androidx.core.view.isGone
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
+import com.bumptech.glide.request.RequestListener
+import com.bumptech.glide.request.target.Target
 import ru.kolxz2.chertholder.R
 import ru.kolxz2.chertholder.databinding.MainPageFocusAccountCardBinding
 
@@ -26,6 +29,8 @@ internal class CardholderLayout @JvmOverloads constructor(
     var cardStateFactory: CardStateFactory = DefaultCardStateFactory()
 
     private var cardSources: List<CardSource> = emptyList()
+
+    private var defaultFallbackUrl: String? = null
 
     private var isCollapsed: Boolean = false
 
@@ -78,7 +83,9 @@ internal class CardholderLayout @JvmOverloads constructor(
         cardSources: List<CardSource> = this.cardSources,
         isCollapsed: Boolean = this.isCollapsed,
         isAnimate: Boolean = true,
+        defaultUrl: String? = this.defaultFallbackUrl,
     ) {
+        this.defaultFallbackUrl = defaultUrl
         applyChange(
             cards = cardSources,
             collapsed = isCollapsed,
@@ -274,12 +281,39 @@ internal class CardholderLayout @JvmOverloads constructor(
 
     private fun MainPageFocusAccountCardBinding.load(cardSource: CardSource?) {
         when (cardSource) {
-            is CardSource.UrlSource -> Glide
-                .with(cardImage)
-                .load(cardSource.url)
-                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                .transition(DrawableTransitionOptions.withCrossFade())
-                .into(cardImage)
+            is CardSource.UrlSource -> {
+                val fallbackUrl = defaultFallbackUrl
+                Glide.with(cardImage)
+                    .load(cardSource.url)
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                    .transition(DrawableTransitionOptions.withCrossFade())
+                    .listener(object : RequestListener<Drawable> {
+                        override fun onLoadFailed(
+                            e: GlideException?,
+                            model: Any?,
+                            target: Target<Drawable>,
+                            isFirstResource: Boolean,
+                        ): Boolean {
+                            if (fallbackUrl != null) {
+                                Glide.with(cardImage)
+                                    .load(fallbackUrl)
+                                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                                    .transition(DrawableTransitionOptions.withCrossFade())
+                                    .into(cardImage)
+                            }
+                            return true
+                        }
+
+                        override fun onResourceReady(
+                            resource: Drawable,
+                            model: Any,
+                            target: Target<Drawable>?,
+                            dataSource: com.bumptech.glide.load.DataSource,
+                            isFirstResource: Boolean,
+                        ): Boolean = false
+                    })
+                    .into(cardImage)
+            }
 
             is CardSource.DrawableSource -> Glide
                 .with(cardImage)
