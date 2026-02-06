@@ -7,7 +7,6 @@ import android.content.Context
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
 import android.view.LayoutInflater
-import android.view.View
 import android.view.animation.AnimationUtils
 import android.widget.FrameLayout
 import androidx.core.animation.doOnStart
@@ -15,6 +14,9 @@ import androidx.core.content.ContextCompat
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
+import com.bumptech.glide.request.target.CustomTarget
+import com.bumptech.glide.request.transition.Transition
+import com.bumptech.glide.request.target.Target
 import ru.kolxz2.chertholder.R
 import ru.kolxz2.chertholder.databinding.MainPageFocusAccountCardBinding
 
@@ -321,15 +323,24 @@ internal class CardholderLayout @JvmOverloads constructor(
             else -> null
         }
         if (overlayUrl != null) {
-            cardOverlay.visibility = View.VISIBLE
-            Glide.with(cardOverlay)
+            Glide.with(cardView)
                 .load(overlayUrl)
-                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .transition(DrawableTransitionOptions.withCrossFade())
-                .into(cardOverlay)
+                .into(object : CustomTarget<Drawable>(Target.SIZE_ORIGINAL, Target.SIZE_ORIGINAL) {
+                    override fun onResourceReady(
+                        resource: Drawable,
+                        transition: Transition<in Drawable>?,
+                    ) {
+                        cardView.foreground = resource
+                    }
+
+                    override fun onLoadCleared(placeholder: Drawable?) {
+                        cardView.foreground = null
+                    }
+                })
         } else {
-            cardOverlay.visibility = View.GONE
-            Glide.with(cardOverlay).clear(cardOverlay)
+            Glide.with(cardView).clear(cardView)
+            cardView.foreground = null
         }
     }
 
