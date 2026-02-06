@@ -23,6 +23,14 @@
             android:contentDescription="@string/image_description"
             android:scaleType="centerCrop" />
 
+        <ImageView
+            android:id="@+id/card_overlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/image_description"
+            android:scaleType="centerCrop"
+            android:visibility="gone" />
+
     </com.google.android.material.card.MaterialCardView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

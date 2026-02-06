@@ -7,6 +7,7 @@ import android.content.Context
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import android.view.View
 import android.view.animation.AnimationUtils
 import android.widget.FrameLayout
 import androidx.core.animation.doOnStart
@@ -314,6 +315,22 @@ internal class CardholderLayout @JvmOverloads constructor(
                 .clear(cardImage)
                 .also { cardImage.setImageDrawable(null) }
         }
+        val overlayUrl = when (cardSource) {
+            is CardSource.UrlSource -> cardSource.overlayUrl
+            is CardSource.DrawableSource -> cardSource.overlayUrl
+            else -> null
+        }
+        if (overlayUrl != null) {
+            cardOverlay.visibility = View.VISIBLE
+            Glide.with(cardOverlay)
+                .load(overlayUrl)
+                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                .transition(DrawableTransitionOptions.withCrossFade())
+                .into(cardOverlay)
+        } else {
+            cardOverlay.visibility = View.GONE
+            Glide.with(cardOverlay).clear(cardOverlay)
+        }
     }
 
     private fun List<MainPageFocusAccountCardBinding>.load(cards: List<CardSource>) {
@@ -322,9 +339,9 @@ internal class CardholderLayout @JvmOverloads constructor(
 
     sealed interface CardSource {
 
-        data class UrlSource(val url: String) : CardSource
+        data class UrlSource(val url: String, val overlayUrl: String? = null) : CardSource
 
-        data class DrawableSource(val icon: Drawable) : CardSource
+        data class DrawableSource(val icon: Drawable, val overlayUrl: String? = null) : CardSource
     }
 
     data class CardState(
